@@ -17,7 +17,7 @@ TYPE_TEXT = {"type": "text"}
 WAIT_TIME = 10
 
 # config.json から設定を読み込む
-config_path = Path("config.json")
+config_path = Path("prompt/config.json")
 if config_path.exists():
     with config_path.open(encoding="utf-8") as f:
         config = json.load(f)
