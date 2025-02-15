@@ -61,6 +61,7 @@ def load_usage_data(user_data_file: Path = USER_DATA_FILE) -> dict:
             data = json.load(f)
             if "adventure_history" not in data: # 初回起動時などでキーが存在しない場合
                 return {"adventure_history": []} # 空のリストで初期化
+            data["adventure_history"].sort(key=lambda item: item["timestamp"], reverse=True)
             return data
     except (FileNotFoundError, json.JSONDecodeError):
         return {"adventure_history": []}
@@ -186,11 +187,9 @@ def run_adventure_streaming():
     hours, remainder = divmod(total_time.total_seconds(), 3600)
     minutes = remainder // 60
     summary_text = (
-        f"- 支出: `-{ADVENTURE_COST}円`\n"
         f"- 結果: `{selected_outcome}`\n"
         f"- 獲得金額: `{prize}円`\n"
         f"- エリア: `{selected_area}`\n"
-        f"- 冒険: `{selected_adventure}`\n"
         f"- 冒険者: `{adventurer_name}`\n"
         f"- 経過時間: `{int(hours)}時間{int(minutes)}分`"
     )

@@ -93,10 +93,10 @@ def display_past_adventure(entry):
 def show_adventure_history_sidebar(adventure_history):
     """サイドバーに冒険履歴を表示し、選択された冒険を返す"""
     st.subheader("最近の冒険")
-    for entry in reversed(adventure_history[-10:]):
+    for entry in adventure_history[-10:]:
         outcome_emoji = get_outcome_emoji(entry["outcome"])
         caption_text = (
-            f"{entry['timestamp'][:10]} "
+            f"{datetime.fromisoformat(entry['timestamp']).strftime('%m/%d')} "
             f"{outcome_emoji} "
             f"{entry['adventurer']} - "
             f"{entry['area']}"
@@ -115,10 +115,13 @@ def show_adventure_history_sidebar(adventure_history):
 def show_home(adventure_history):
     """ホーム画面を表示"""
     st.title("💎 Logqwest")
-    if st.button("冒険者を雇う（¥100出資）"):
-        st.session_state.running_adventure = True
 
-    if st.session_state.get("running_adventure", False):
+    if 'run_button' in st.session_state and st.session_state.run_button == True:
+        st.session_state.running_adventure = True
+    else:
+        st.session_state.running_adventure = False
+
+    if st.button("冒険者を雇う（¥100出資）", disabled=st.session_state.running_adventure, key="run_button"):
         message_container = st.empty()
         summary_container = st.empty()
         accumulated_messages = ""
@@ -151,6 +154,7 @@ def main():
     """メイン関数： Streamlitアプリケーションの実行ロジック"""
     usage_data = load_usage_data()
     adventure_history = usage_data.get("adventure_history", [])
+    st.session_state.running_adventure = False
 
     selected_entry = None
     query_params = st.query_params
@@ -174,7 +178,7 @@ def main():
 
     if selected_entry:
         display_past_adventure(selected_entry)
-    elif not st.session_state.get("running_adventure", False):
+    else:
         show_home(adventure_history)
 
 
