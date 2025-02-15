@@ -93,7 +93,7 @@ def display_past_adventure(entry):
 def show_adventure_history_sidebar(adventure_history):
     """サイドバーに冒険履歴を表示し、選択された冒険を返す"""
     st.subheader("最近の冒険")
-    for entry in adventure_history[-10:]:
+    for entry in adventure_history:
         outcome_emoji = get_outcome_emoji(entry["outcome"])
         caption_text = (
             f"{datetime.fromisoformat(entry['timestamp']).strftime('%m/%d')} "
@@ -121,7 +121,7 @@ def show_home(adventure_history):
     else:
         st.session_state.running_adventure = False
 
-    if st.button("冒険者を雇う（¥100出資）", disabled=st.session_state.running_adventure, key="run_button"):
+    if st.button("冒険者を雇う（¥100の出資）", disabled=st.session_state.running_adventure, key="run_button"):
         message_container = st.empty()
         summary_container = st.empty()
         accumulated_messages = ""
@@ -147,7 +147,8 @@ def show_home(adventure_history):
                 summary_container.markdown(f"### 冒険結果\n{event['text']}")
             message_container.markdown(accumulated_messages, unsafe_allow_html=True) # イベントごとに message_container を更新
             time.sleep(0.1)
-        st.session_state.running_adventure = False
+        if st.button("戻る"):
+            st.rerun()
 
 
 def main():
