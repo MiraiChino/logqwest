@@ -1,0 +1,7 @@
+google-generativeai
+grpcio==1.67.1
+watchdog
+pandas
+streamlit
+json5
+groq
