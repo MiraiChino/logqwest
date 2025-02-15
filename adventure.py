@@ -182,3 +182,16 @@ def run_adventure_streaming():
     usage_data["adventure_history"].append(adventure_entry)
 
     save_usage_data(usage_data)
+
+    hours, remainder = divmod(total_time.total_seconds(), 3600)
+    minutes = remainder // 60
+    summary_text = (
+        f"- 支出: `-{ADVENTURE_COST}円`\n"
+        f"- 結果: `{selected_outcome}`\n"
+        f"- 獲得金額: `{prize}円`\n"
+        f"- エリア: `{selected_area}`\n"
+        f"- 冒険: `{selected_adventure}`\n"
+        f"- 冒険者: `{adventurer_name}`\n"
+        f"- 経過時間: `{int(hours)}時間{int(minutes)}分`"
+    )
+    yield {"type": "summary", "text": summary_text}

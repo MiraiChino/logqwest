@@ -127,7 +127,7 @@ def show_home(adventure_history):
         initial_message_html = "<span style='color: #888; font-style: italic;'>冒険者を探しています...</span><br>"
         accumulated_messages += initial_message_html
         message_container.markdown(accumulated_messages, unsafe_allow_html=True)
-        time.sleep(1)
+        time.sleep(3)
 
         for event in run_adventure_streaming():
             if event["type"] == "error":
