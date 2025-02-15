@@ -145,7 +145,6 @@ def run_adventure_streaming():
     # 雇用メッセージを追加
     yield {
         "type": "hiring",
-        "text": f"冒険者『{adventurer_name}』を雇用しました。",
         "adventurer": adventurer_name
     }
 
