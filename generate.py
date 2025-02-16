@@ -149,11 +149,11 @@ def generate_logs_for_area(log_generator, area_name, area_csv_path):
                         pre_log=pre_log,
                     )
                     print(f"✅ ログ {i+1}/{len(CHAPTER_SETTINGS)}: {adventure_txt_path}")
-                    if DEBUG_MODE:
-                        # DEBUG_MODE 時は各冒険で1チャプターのみ生成し、ファイルを削除して確認可能にする
-                        adventure_txt_path.unlink(missing_ok=True)
-                        print(f"🔥 ログ : {adventure_txt_path}")
-                        break
+                    # if DEBUG_MODE:
+                    #     # DEBUG_MODE 時は各冒険で1チャプターのみ生成し、ファイルを削除して確認可能にする
+                    #     adventure_txt_path.unlink(missing_ok=True)
+                    #     print(f"🔥 ログ : {adventure_txt_path}")
+                    #     break
             else:
                 continue
             if DEBUG_MODE:

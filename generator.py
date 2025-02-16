@@ -347,20 +347,18 @@ class LogGenerator(BaseGenerator):
         adventure_txt_path = get_adventure_path(area_name, adventure_name)
         chapters = self._load_chapters(area_csv_path, adventure_name)
         chapter_text = chapters[i_chapter]
+        next_chapter_text = chapters[i_chapter + 1] if i_chapter + 1 < len(CHAPTER_SETTINGS) else "（次章はなく、物語はこの章で終わる。）"
         kwargs = {
             "before_chapter": setting.get("before_chapter", ""),
             "chapter": chapter_text,
             "after_chapter": setting.get("after_chapter", ""),
+            "next_chapter": next_chapter_text,
             "before_log": BEFORE_LOG_TEMPLATE["with_pre_log"].format(pre_log=pre_log) if i_chapter != 0 and pre_log else BEFORE_LOG_TEMPLATE["default"]
         }
 
         # 章テキストに含まれるエリア情報に基づいてarea_info_textを生成
-        area_info_text = "- **エリア情報の活用：**  \n  エリア情報を、**物語の背景、イベント、オブジェクト、登場人物、会話などに自然に組み込んでください。**  冒険者がエリア情報を直接的に語るのではなく、**体験を通して**エリア情報が**間接的に**読者に伝わるように工夫してください。\n"
+        area_info_text = "### （参考）エリア情報の活用：  \n  エリア情報を、**物語の背景、イベント、オブジェクト、登場人物、会話などに自然に組み込んでください。**  冒険者がエリア情報を直接的に語るのではなく、**体験を通して**エリア情報が**間接的に**読者に伝わるように工夫してください。\n"
         are_info_added = False
-        if area_name in chapter_text.lower():
-            area_info_text += f"  - {CSV_HEADERS_AREA[0].lower()}: {area_info[CSV_HEADERS_AREA[0]]}\n"
-            area_info_text += f"  - {CSV_HEADERS_AREA[2].lower()}: {area_info[CSV_HEADERS_AREA[2]]}\n"
-            are_info_added = True
         for header in CSV_HEADERS_AREA: # すべてのヘッダーをチェック
             keywords = area_info.get(f"{header}_keywords", []) # キーワードリストを取得 (例: "生息する無害な生物_keywords")
             if keywords: # キーワードリストが存在する場合のみチェック
@@ -391,7 +389,7 @@ class LogGenerator(BaseGenerator):
             if match:
                 content_line = match.group(1)
                 if not NG_WORDS.intersection(content_line.split()):
-                    filtered_lines.append(content_line)
+                    filtered_lines.append(content_line.strip())
                 else:
                     raise ValueError(f"NGワードが含まれています: {content_line}")
         if not filtered_lines:
