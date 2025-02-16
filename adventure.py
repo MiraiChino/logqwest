@@ -167,7 +167,7 @@ def run_adventure_streaming():
             yield {"type": "message", "time": time_str, "text": line_text}
 
             if DEBUG_MODE:
-                time.sleep(time_increment.total_seconds() / 60)
+                time.sleep(time_increment.total_seconds() / 3600)
             else:
                 time.sleep(time_increment.total_seconds())
 

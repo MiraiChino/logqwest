@@ -2,6 +2,6 @@
 __pycache__/
 venv
 
-data
+data*
 prompt
 user_data

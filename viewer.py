@@ -9,7 +9,7 @@ DATA_DIR = Path("data")
 
 def get_area_csv_path(area: str) -> Path:
     """指定されたエリア名のCSVファイルパスを返す。"""
-    return DATA_DIR / f"{area}.csv"
+    return DATA_DIR / area / f"{area}.csv"
 
 def get_adventure_path(area: str, adv: str) -> Path:
     """指定されたエリア内の冒険テキストファイルのパスを返す。"""
