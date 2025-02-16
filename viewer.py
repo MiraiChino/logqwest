@@ -102,13 +102,16 @@ def sidebar_navigation(area_names: list):
     with st.sidebar:
         query_params = {"area": "エリア一覧"}
         link_url = f"?{urlencode(query_params)}"
+        if st.button("🔄 更新"):
+            st.cache_data.clear()
+            st.rerun() # rerunして最新データを読み込み直す
         st.caption(
             f'<a href="{link_url}" target="_self">📖全エリア一覧</a>',
             unsafe_allow_html=True,
         )
 
         # **エリア名フィルタ**
-        filter_keyword = st.text_input("エリア名でフィルタ", "", label_visibility="collapsed")
+        filter_keyword = st.text_input("🔎", "", placeholder="🔎", label_visibility="collapsed")
         filtered_area_names = filter_dataframe(
             pd.DataFrame({"エリア名": area_names}), filter_keyword, "エリア名"
         )["エリア名"].tolist()
@@ -168,7 +171,7 @@ def display_area_list(df_areas: pd.DataFrame):
     df_areas_sorted = df_areas.sort_values(by="エリア名").reset_index(drop=True)
 
     # **フィルタリング**
-    filter_keyword = st.text_input("エリア名でフィルタ (部分一致)", "", label_visibility="collapsed")
+    filter_keyword = st.text_input("エリア名でフィルタ (部分一致)", "", placeholder="🔎", label_visibility="collapsed")
     df_areas_filtered = filter_dataframe(df_areas_sorted, filter_keyword, "エリア名")
 
     # **ページネーション**
