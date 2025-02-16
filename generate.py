@@ -40,7 +40,6 @@ RESULT_TEMPLATE = config["RESULT_TEMPLATE"]
 NG_WORDS = set(config["NG_WORDS"])
 CSV_HEADERS_AREA = config["CSV_HEADERS_AREA"]
 NEW_AREA_NAME_PROMPT = config["NEW_AREA_NAME_PROMPT"]
-REQUIRED_FIELDS_AREA = config["REQUIRED_FIELDS_AREA"]
 CSV_HEADERS_ADVENTURE = config["CSV_HEADERS_ADVENTURE"]
 CHAPTER_SETTINGS = config["CHAPTER_SETTINGS"]
 BEFORE_LOG_TEMPLATE = config["BEFORE_LOG_TEMPLATE"]
@@ -252,7 +251,7 @@ class AreaGenerator(BaseGenerator):
         return match.group(1).strip()
 
     def _validate_area_data(self, data):
-        for field in REQUIRED_FIELDS_AREA:
+        for field in CSV_HEADERS_AREA:
             if field not in data:
                 raise ValueError(f"必須フィールドがありません: {field}")
             value = data[field]
@@ -298,7 +297,7 @@ class AdventureGenerator(BaseGenerator):
                 for row in reader:
                     if len(row) == len(CSV_HEADERS_AREA):
                         area_data = dict(zip(CSV_HEADERS_AREA, row))
-                        areas[row[0]] = row[1:]
+                        areas[row[0]] = area_data
         return areas
 
     @retry_on_failure()
@@ -323,7 +322,7 @@ class AdventureGenerator(BaseGenerator):
 
         # AREA_INFO_KEYS_FOR_PROMPT を利用して area_data から値を取得
         for i, key in enumerate(AREA_INFO_KEYS_FOR_PROMPT):
-            prompt_kwargs[key.lower()] = area_info[i]  # area_info から index で値を取得
+            prompt_kwargs[key.lower()] = area_info[CSV_HEADERS_AREA[i]]
 
         contents = self.generate(
             response_format=TYPE_JSON,
@@ -400,8 +399,36 @@ class AdventureGenerator(BaseGenerator):
 class LogGenerator(BaseGenerator):
     CHAPTER_SETTINGS = CHAPTER_SETTINGS
 
-    def __init__(self, chat_client):
+    def __init__(self, chat_client, all_areas_csv_path):
         super().__init__(chat_client)
+        self.all_areas_csv_path = all_areas_csv_path
+        self.area_header_keywords = self._generate_area_header_keywords() # ヘッダーごとのキーワード抽出設定
+        self.areas = self._load_areas()
+
+    def _generate_area_header_keywords(self):
+        return {
+            CSV_HEADERS_AREA[4]: r"([^:]+):", # "生物名:" 形式
+            CSV_HEADERS_AREA[6]: r"([^:]+):", # "生物名:" 形式
+            CSV_HEADERS_AREA[7]: r"([^:]+):", # "アイテム名:" 形式
+            CSV_HEADERS_AREA[8]: r"([^:]+)", # 財宝名 (シンプルな名詞)
+        }
+
+    def _load_areas(self):
+        areas = {}
+        areas_csv_path = Path(self.all_areas_csv_path)
+        if areas_csv_path.exists():
+            with areas_csv_path.open("r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                next(reader, None)
+                for row in reader:
+                    if len(row) == len(CSV_HEADERS_AREA):
+                        area_data = dict(zip(CSV_HEADERS_AREA, row))
+                        for header, keyword_regex in self.area_header_keywords.items(): # 各ヘッダーに対してキーワード抽出
+                            header_text = area_data.get(header, "")
+                            keywords = [name.strip() for name in re.findall(keyword_regex, header_text)] # 正規表現でキーワード抽出
+                            area_data[f"{header}_keywords"] = keywords # キーワードリストをarea_dataに追加 (例: "生息する無害な生物_keywords")
+                        areas[row[0]] = area_data # エリア名をキーとして辞書を保存
+        return areas
 
     def _load_chapters(self, area_csv_path, adventure_name):
         area_csv_path = Path(area_csv_path)
@@ -417,17 +444,45 @@ class LogGenerator(BaseGenerator):
 
     @retry_on_failure()
     def generate_log(self, area_name, adventure_name, i_chapter, pre_log=None):
+        area_info = self.areas.get(area_name)
+        if not area_info:
+            raise ValueError(f"エリア '{area_name}' が見つかりません。")
+        
         setting = self.CHAPTER_SETTINGS[i_chapter]
         template_file = setting.get("template_file", NEW_LOG_TEMPLATE_FILE)
         area_csv_path = get_area_csv_path(area_name)
         adventure_txt_path = get_adventure_txt_path(area_name, adventure_name)
         chapters = self._load_chapters(area_csv_path, adventure_name)
+        chapter_text = chapters[i_chapter]
         kwargs = {
             "before_chapter": setting.get("before_chapter", ""),
-            "chapter": chapters[i_chapter],
+            "chapter": chapter_text,
             "after_chapter": setting.get("after_chapter", ""),
             "before_log": BEFORE_LOG_TEMPLATE["with_pre_log"].format(pre_log=pre_log) if i_chapter != 0 and pre_log else BEFORE_LOG_TEMPLATE["default"]
         }
+
+        # 章テキストに含まれるエリア情報に基づいてarea_info_textを生成
+        area_info_text = "- **エリア情報の活用：**  \n  エリア情報を、**物語の背景、イベント、オブジェクト、登場人物、会話などに自然に組み込んでください。**  冒険者がエリア情報を直接的に語るのではなく、**体験を通して**エリア情報が**間接的に**読者に伝わるように工夫してください。\n"
+        are_info_added = False
+        if area_name in chapter_text.lower():
+            area_info_text += f"  - {CSV_HEADERS_AREA[0].lower()}: {area_info[CSV_HEADERS_AREA[0]]}\n"
+            area_info_text += f"  - {CSV_HEADERS_AREA[2].lower()}: {area_info[CSV_HEADERS_AREA[2]]}\n"
+            are_info_added = True
+        for header in CSV_HEADERS_AREA: # すべてのヘッダーをチェック
+            keywords = area_info.get(f"{header}_keywords", []) # キーワードリストを取得 (例: "生息する無害な生物_keywords")
+            if keywords: # キーワードリストが存在する場合のみチェック
+                for keyword in keywords:
+                    if keyword.lower() in chapter_text.lower(): # 章テキストにキーワードが含まれているか確認 (小文字で比較)
+                        area_value = area_info.get(header) # ヘッダーに対応するテキスト全体を取得
+                        if area_value:
+                            area_info_text += f"  - {header}: {area_value}\n" # 文字列として整形
+                            are_info_added = True
+
+        if are_info_added: # 何か情報が追加された場合のみarea_infoをkwargsに追加
+            kwargs["area_info"] = area_info_text.strip() # 余分な改行を削除
+        else:
+            kwargs["area_info"] = ""
+
         self.template = self._load_template(template_file)
         log_contents = self.generate(response_format=TYPE_TEXT, **kwargs)
         self._add_to_txt(adventure_txt_path, log_contents)
@@ -585,11 +640,13 @@ def generate_logs_for_area(log_generator, area_name, area_csv_path):
                         pre_log=pre_log,
                     )
                     print(f"✅ ログ {i+1}/{len(CHAPTER_SETTINGS)}: {adventure_txt_path}")
-                    if DEBUG_MODE:
-                        # DEBUG_MODE 時は各冒険で1チャプターのみ生成し、ファイルを削除して確認可能にする
-                        adventure_txt_path.unlink(missing_ok=True)
-                        print(f"🔥 ログ : {adventure_txt_path}")
-                        break
+                    # if DEBUG_MODE:
+                    #     # DEBUG_MODE 時は各冒険で1チャプターのみ生成し、ファイルを削除して確認可能にする
+                    #     adventure_txt_path.unlink(missing_ok=True)
+                    #     print(f"🔥 ログ : {adventure_txt_path}")
+                    #     break
+            else:
+                continue
             if DEBUG_MODE:
                 break
 
@@ -610,7 +667,7 @@ def main():
 
     area_generator = AreaGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
     adventure_generator = AdventureGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
-    log_generator = LogGenerator(chat_client)
+    log_generator = LogGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
 
     if args.type == "area":
         generate_area_content(area_generator, args.count)
