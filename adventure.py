@@ -1,14 +1,12 @@
 import csv
-import json
-import random
 import time
-from collections import defaultdict
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
+from collections import defaultdict
 
-# 定数・設定
-DATA_DIR = Path("data")
-USER_DATA_FILE = Path("user_data") / "history.json"
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, load_usage_data, save_usage_data
+
 ADVENTURE_COST = 100
 DEBUG_MODE = True
 # DEBUG時にエリアを強制指定する場合は値を設定（例："静寂の草原"）、通常はNone
@@ -16,15 +14,15 @@ DEBUG_OVERRIDE_AREA = None
 DEFAULT_NAME = "アーサー"
 
 
-def load_valid_areas(data_dir: Path = DATA_DIR) -> list[str]:
+def load_valid_areas() -> list[str]:
     """有効なエリア一覧をCSVから読み込み、対応するCSVファイルが存在するエリアのみ返す。"""
-    areas_file = data_dir / "areas.csv"
+    areas_file = DATA_DIR / "areas.csv"
     valid_areas = []
     with areas_file.open("r", encoding="utf-8") as f:
         for row in csv.reader(f):
             if row:
                 area = row[0].strip()
-                if (data_dir / f"{area}.csv").exists():
+                if get_area_csv_path(area).exists():
                     valid_areas.append(area)
     return valid_areas
 
@@ -36,12 +34,12 @@ def select_outcome(outcomes: dict) -> str:
     return random.choices(outcome_names, weights=weights, k=1)[0]
 
 
-def load_scenario_mappings(area: str, data_dir: Path = DATA_DIR) -> dict:
+def load_scenario_mappings(area: str) -> dict:
     """
     指定エリアのCSVからシナリオのマッピングを読み込み、
     結果毎にファイル名のリストを返す。
     """
-    csv_path = data_dir / f"{area}.csv"
+    csv_path =  get_area_csv_path(area)
     mappings = {"大成功": [], "成功": [], "失敗": []}
     with csv_path.open("r", encoding="utf-8") as f:
         for row in csv.reader(f):
@@ -51,26 +49,6 @@ def load_scenario_mappings(area: str, data_dir: Path = DATA_DIR) -> dict:
                 if result in mappings:
                     mappings[result].append(filename)
     return mappings
-
-def load_usage_data(user_data_file: Path = USER_DATA_FILE) -> dict:
-    """
-    使用履歴と収支情報をJSONファイルから読み込む。
-    """
-    try:
-        with user_data_file.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            if "adventure_history" not in data: # 初回起動時などでキーが存在しない場合
-                return {"adventure_history": []} # 空のリストで初期化
-            data["adventure_history"].sort(key=lambda item: item["timestamp"], reverse=True)
-            return data
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"adventure_history": []}
-
-def save_usage_data(data: dict, user_data_file: Path = USER_DATA_FILE):
-    """使用履歴と収支情報をJSONファイルへ保存する。"""
-    user_data_file.parent.mkdir(parents=True, exist_ok=True)
-    with user_data_file.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def select_unused_adventure(filenames: list[str], adventure_history: list) -> str:
@@ -135,7 +113,7 @@ def run_adventure_streaming():
         return
 
     selected_adventure = select_unused_adventure(target_files, adventure_history) # 冒険履歴を渡す
-    adventure_file = DATA_DIR / selected_area / f"{selected_adventure}.txt"
+    adventure_file = get_adventure_path(area=selected_area, adv=selected_adventure)
     if not adventure_file.exists():
         yield {"type": "error", "error": f"ファイルが見つかりません: {adventure_file}"}
         return

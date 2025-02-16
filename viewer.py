@@ -1,33 +1,7 @@
-from pathlib import Path
 import streamlit as st
 import pandas as pd
 
-# --------------------------------------------------
-# 定数＆ユーティリティ関数
-# --------------------------------------------------
-DATA_DIR = Path("data")
-
-def get_area_csv_path(area: str) -> Path:
-    """指定されたエリア名のCSVファイルパスを返す。"""
-    return DATA_DIR / area / f"{area}.csv"
-
-def get_adventure_path(area: str, adv: str) -> Path:
-    """指定されたエリア内の冒険テキストファイルのパスを返す。"""
-    return DATA_DIR / area / f"{adv}.txt"
-
-def load_csv(csv_path: Path) -> pd.DataFrame:
-    """
-    CSVファイルを読み込みDataFrameを返す。  
-    ファイルが存在しない場合は None を返す。
-    """
-    return pd.read_csv(csv_path) if csv_path.exists() else None
-
-def render_df(df: pd.DataFrame) -> str:
-    """
-    DataFrameをHTMLテーブルに変換する。  
-    すべてのセルの縦位置を上揃えにするスタイルを適用する。
-    """
-    return df.style.set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, load_csv
 
 # --------------------------------------------------
 # チェック処理・クエリパラメータ更新関数
@@ -48,8 +22,8 @@ def is_adventure_complete(area: str, adv: str) -> bool:
 
 def is_area_complete(area: str) -> bool:
     """
-    エリアCSVファイルが存在し、かつそのCSV内のすべての冒険詳細ファイルが  
-    存在し内容が160行以上の場合に True を返す。  
+    エリアCSVファイルが存在し、かつそのCSV内のすべての冒険詳細ファイルが
+    存在し内容が160行以上の場合に True を返す。
     存在しない、または冒険データが不足している場合は False を返す。
     """
     csv_path = get_area_csv_path(area)
@@ -66,7 +40,7 @@ def is_area_complete(area: str) -> bool:
 
 def update_query_params(area: str, adv: str = ""):
     """
-    クエリパラメータにキー "area" と "adv" をセットする。  
+    クエリパラメータにキー "area" と "adv" をセットする。
     これによりURLを更新する。
     """
     st.query_params["area"] = area
@@ -82,9 +56,17 @@ def set_current_area(area: str):
 # --------------------------------------------------
 # 表示系ヘルパー関数
 # --------------------------------------------------
+
+def render_df(df: pd.DataFrame) -> str:
+    """
+    DataFrameをHTMLテーブルに変換する。
+    すべてのセルの縦位置を上揃えにするスタイルを適用する。
+    """
+    return df.style.set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
+
 def show_progress(ratio: float, label: str):
     """
-    プログレスバーとそのラベルを表示する。  
+    プログレスバーとそのラベルを表示する。
     ratioが 1.0（100%）の場合は、プログレスバーの色を緑色に変更する。
     """
     if ratio == 1.0:
@@ -103,9 +85,9 @@ def show_progress(ratio: float, label: str):
 
 def sidebar_navigation(area_names: list):
     """
-    サイドバーにナビゲーションを構築する。  
-    「エリア一覧」と各エリアのボタンを表示し、  
-    ①エリアCSVが存在する場合はボタン化、  
+    サイドバーにナビゲーションを構築する。
+    「エリア一覧」と各エリアのボタンを表示し、
+    ①エリアCSVが存在する場合はボタン化、
     ②全冒険詳細ファイルが揃っている（is_area_complete==True）ならラベルの先頭に✅を付与する。
     """
     st.sidebar.title("ナビゲーション")
@@ -129,8 +111,8 @@ def sidebar_navigation(area_names: list):
 # --------------------------------------------------
 def display_area_list(df_areas: pd.DataFrame):
     """
-    「エリア一覧」ページを表示する。  
-    各エリア名は、CSVが存在する場合はリンク化され、すべての冒険詳細ファイルが揃っている場合は先頭に✅が付く。  
+    「エリア一覧」ページを表示する。
+    各エリア名は、CSVが存在する場合はリンク化され、すべての冒険詳細ファイルが揃っている場合は先頭に✅が付く。
     また、ページ上部にエリアデータの存在率をプログレスバーで表示する。
     """
     st.title("エリア一覧")
@@ -149,9 +131,9 @@ def display_area_list(df_areas: pd.DataFrame):
 
 def display_adventure_detail(selected_area: str, selected_adv: str):
     """
-    冒険詳細ページを表示する。  
-    エリアCSVから該当の冒険情報行を抽出し、  
-    対応するテキストファイルの内容も表示する。  
+    冒険詳細ページを表示する。
+    エリアCSVから該当の冒険情報行を抽出し、
+    対応するテキストファイルの内容も表示する。
     「戻る」ボタンでエリアページへ遷移する。
     """
     st.title(f"{selected_area} - {selected_adv} 詳細")
@@ -185,9 +167,9 @@ def display_adventure_detail(selected_area: str, selected_adv: str):
 
 def display_area_page(selected_area: str, df_areas: pd.DataFrame):
     """
-    各エリアページを表示する。  
-    ページ冒頭にエリア一覧（areas.csv）の対象エリア情報を表示し、  
-    その下に該当エリア内の冒険一覧と、データの存在率を示すプログレスバーを表示する。  
+    各エリアページを表示する。
+    ページ冒頭にエリア一覧（areas.csv）の対象エリア情報を表示し、
+    その下に該当エリア内の冒険一覧と、データの存在率を示すプログレスバーを表示する。
     冒険テキストファイルが存在し、かつ160行以上ある場合はリンクに✅を付与する。
     """
     st.title(f"{selected_area} のデータ")

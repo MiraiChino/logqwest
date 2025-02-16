@@ -5,7 +5,8 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
-from adventure import DATA_DIR, load_usage_data, run_adventure_streaming, ADVENTURE_COST
+from common import get_adventure_path, get_outcome_emoji, load_usage_data
+from adventure import run_adventure_streaming, ADVENTURE_COST
 
 
 # ロケール設定
@@ -18,14 +19,6 @@ st.set_page_config(
     layout="wide",
 )
 
-def get_outcome_emoji(outcome: str) -> str:
-    """結果に応じて絵文字を返す"""
-    outcome_emojis = {
-        "大成功": "💎",
-        "成功": "🎁",
-        "失敗": "❌",
-    }
-    return outcome_emojis.get(outcome, "")
 
 def _process_adventure_log(adventure_log_content: str, start_time: datetime, adventurer_name: str) -> str:
     """冒険ログの内容を処理して、タイムスタンプ付きのログ行リスト（HTML形式）を返す"""
@@ -55,7 +48,7 @@ def display_past_adventure(entry):
         unsafe_allow_html=True,
     )
 
-    adventure_file = DATA_DIR / entry["area"] / f"{entry['filename']}.txt"
+    adventure_file = get_adventure_path(area=entry['area'], adv=entry['filename'])
     if not adventure_file.exists():
         st.error("冒険記録ファイルが見つかりません")
         return
@@ -121,7 +114,7 @@ def show_home(adventure_history):
     else:
         st.session_state.running_adventure = False
 
-    if st.button("冒険者を雇う（¥100の出資）", disabled=st.session_state.running_adventure, key="run_button"):
+    if st.button(f"冒険者を雇う（¥{ADVENTURE_COST}の出資）", disabled=st.session_state.running_adventure, key="run_button"):
         message_container = st.empty()
         summary_container = st.empty()
         accumulated_messages = ""
