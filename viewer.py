@@ -110,7 +110,7 @@ def sidebar_navigation(area_names: list):
         # **エリア名フィルタ**
         filter_keyword = st.text_input("エリア名でフィルタ", "", label_visibility="collapsed")
         filtered_area_names = filter_dataframe(
-            pd.DataFrame({"エリア名": area_names}), filter_ｓkeyword, "エリア名"
+            pd.DataFrame({"エリア名": area_names}), filter_keyword, "エリア名"
         )["エリア名"].tolist()
 
         # **エリア名を名前順にソート**
