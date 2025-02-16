@@ -12,10 +12,6 @@ from generator import AreaGenerator, AdventureGenerator, LogGenerator
 from common import get_area_csv_path, get_adventure_path
 
 
-# グローバル定数としてのデバッグフラグ（デフォルトは False）
-DEBUG_MODE = False
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser(description="エリア、冒険、ログジェネレータ")
     parser.add_argument(
@@ -62,6 +58,7 @@ def parse_arguments():
 
 def generate_area_content(area_generator, count):
     # DEBUG_MODE が True の場合、実行回数を 1 に制限
+    global DEBUG_MODE
     if DEBUG_MODE:
         count = 1
     for _ in range(count):
@@ -71,6 +68,7 @@ def generate_area_content(area_generator, count):
 
 
 def process_adventures_content(adventure_generator, result_filter=None):
+    global DEBUG_MODE
     areas = adventure_generator._load_areas()
     for area_name in areas:
         add_adventures_for_area(adventure_generator, area_name, result_filter=result_filter)
@@ -81,6 +79,7 @@ def process_adventures_content(adventure_generator, result_filter=None):
 
 
 def add_adventures_for_area(adventure_generator, area_name, result_filter=None):
+    global DEBUG_MODE
     adventure_types = [
         {"result": "失敗", "nums": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
         {"result": "成功", "nums": [1, 2, 3, 4, 5, 6, 7, 8, 9]},
@@ -115,6 +114,7 @@ def load_existing_adventures_for_area(area_csv_path):
 
 
 def process_logs_content(log_generator):
+    global DEBUG_MODE
     areas_dir = DATA_DIR
     area_dirs = [d for d in areas_dir.iterdir() if d.is_dir()]
     for area_dir in area_dirs:
@@ -127,6 +127,7 @@ def process_logs_content(log_generator):
 
 
 def generate_logs_for_area(log_generator, area_name, area_csv_path):
+    global DEBUG_MODE
     area_csv_path = Path(area_csv_path)
     if not area_csv_path.exists():
         return
@@ -163,6 +164,8 @@ def main():
     global DEBUG_MODE
     args = parse_arguments()
     DEBUG_MODE = args.debug  # グローバルにデバッグフラグを設定
+    import generator
+    generator.DEBUG_MODE = DEBUG_MODE
 
     if args.client == "gemini":
         model_name = args.model if args.model else "models/gemini-2.0-flash-001"

@@ -23,9 +23,6 @@ from config import (
 )
 from common import get_area_csv_path, get_adventure_path
 
-# グローバル定数としてのデバッグフラグ（デフォルトは False）
-DEBUG_MODE = False
-
 
 class BaseGenerator:
     def __init__(self, chat_client, template_file=None):
@@ -45,6 +42,8 @@ class BaseGenerator:
         if not self.template:
             raise ValueError("テンプレートがロードされていません。")
         prompt = self.template.format(**kwargs)
+
+        global DEBUG_MODE
         if DEBUG_MODE:
             print("=== DEBUG: Prompt ===")
             print(prompt)
