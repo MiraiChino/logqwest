@@ -112,7 +112,6 @@ def load_existing_adventures_for_area(area_csv_path):
             return [row[0] for row in reader if row]
     return []
 
-
 def process_logs_content(log_generator):
     global DEBUG_MODE
     areas_dir = DATA_DIR
@@ -125,7 +124,6 @@ def process_logs_content(log_generator):
         if DEBUG_MODE:
             break  # DEBUG_MODE 時は最初の1エリアのみ実行
 
-
 def generate_logs_for_area(log_generator, area_name, area_csv_path):
     global DEBUG_MODE
     area_csv_path = Path(area_csv_path)
@@ -134,28 +132,38 @@ def generate_logs_for_area(log_generator, area_name, area_csv_path):
     with area_csv_path.open("r", encoding="utf-8") as file:
         reader = csv.reader(file)
         next(reader, None)
+
+        # 全ての冒険に対してログを生成
         for row in reader:
-            if not row:
-                continue
-            adventure_name, result, *chapters = row
-            adventure_txt_path = get_adventure_path(area_name, adventure_name)
-            if not adventure_txt_path.exists():
-                pre_log = None
-                for i in range(len(CHAPTER_SETTINGS)):
-                    pre_log = log_generator.generate_log(
-                        area_name=area_name,
-                        adventure_name=adventure_name,
-                        i_chapter=i,
-                        pre_log=pre_log,
-                    )
-                    print(f"✅ ログ {i+1}/{len(CHAPTER_SETTINGS)}: {adventure_txt_path}")
-                    # if DEBUG_MODE:
-                    #     # DEBUG_MODE 時は各冒険で1チャプターのみ生成し、ファイルを削除して確認可能にする
-                    #     adventure_txt_path.unlink(missing_ok=True)
-                    #     print(f"🔥 ログ : {adventure_txt_path}")
-                    #     break
-            else:
-                continue
+            current_adventure_txt_path = None
+            try:
+                if not row:
+                    continue
+                adventure_name, result, *chapters = row
+                adventure_txt_path = get_adventure_path(area_name, adventure_name)
+                temp_adventure_txt_path = adventure_txt_path.with_suffix(f".temp.txt")
+                current_adventure_txt_path = temp_adventure_txt_path
+                if not adventure_txt_path.exists():
+                    pre_log = None
+                    for i in range(len(CHAPTER_SETTINGS)):
+                        pre_log = log_generator.generate_log(
+                            area_name=area_name,
+                            adventure_name=adventure_name,
+                            i_chapter=i,
+                            adventure_txt_path=temp_adventure_txt_path,
+                            pre_log=pre_log,
+                        )
+                        print(f"✅ ログ {i+1}/{len(CHAPTER_SETTINGS)}: {adventure_txt_path}")
+                    temp_adventure_txt_path.replace(adventure_txt_path) # 正常終了時のみ一時ファイルを本ファイルにリネーム
+                else:
+                    print(f"⏩ ログ: {adventure_txt_path} 既に存在するためスキップしました。")
+                    continue # ログファイルが既に存在する場合はスキップ
+            except Exception as e: # for row ループ内で例外が発生した場合
+                print(f"ログ生成中にエラーが発生しました: {e}")
+            finally:
+                if current_adventure_txt_path is not None and Path(current_adventure_txt_path).exists(): # current_adventure_txt_path が定義されているか確認
+                    Path(current_adventure_txt_path).unlink(missing_ok=True) # エラー発生時はログファイルを削除
+                    print(f"🔥 ログファイルを削除しました: {current_adventure_txt_path}")
             if DEBUG_MODE:
                 break
 

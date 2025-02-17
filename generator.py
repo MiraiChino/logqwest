@@ -336,7 +336,7 @@ class LogGenerator(BaseGenerator):
             raise ValueError(f"冒険 '{adventure_name}' が見つかりません。")
 
     @retry_on_failure()
-    def generate_log(self, area_name, adventure_name, i_chapter, pre_log=None):
+    def generate_log(self, area_name, adventure_name, i_chapter, adventure_txt_path=None, pre_log=None):
         area_info = self.areas.get(area_name)
         if not area_info:
             raise ValueError(f"エリア '{area_name}' が見つかりません。")
@@ -344,7 +344,8 @@ class LogGenerator(BaseGenerator):
         setting = self.CHAPTER_SETTINGS[i_chapter]
         template_file = setting.get("template_file", NEW_LOG_TEMPLATE_FILE)
         area_csv_path = get_area_csv_path(area_name)
-        adventure_txt_path = get_adventure_path(area_name, adventure_name)
+        if not adventure_txt_path:
+            adventure_txt_path = get_adventure_path(area_name, adventure_name)
         chapters = self._load_chapters(area_csv_path, adventure_name)
         chapter_text = chapters[i_chapter]
         next_chapter_text = chapters[i_chapter + 1] if i_chapter + 1 < len(CHAPTER_SETTINGS) else "（次章はなく、物語はこの章で終わる。）"
