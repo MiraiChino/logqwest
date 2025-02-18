@@ -106,11 +106,14 @@ class AreaGenerator(BaseGenerator):
             Path(self.all_areas_csv_path).parent.mkdir(parents=True, exist_ok=True)
             self._add_to_csv(self.all_areas_csv_path, [], headers=CSV_HEADERS_AREA)
             return ""
-        area_names = list(self.areas.keys())
-        selected_areas = area_names
+        
+        def treasure_name(data):
+            return data["財宝"].split(":")[0]
+        
+        areas_csv = [f"{area_name},{treasure_name(data)}" for area_name, data in self.areas.items()]
         # selected_areas = random.sample(area_names, min(num_refered_areas, len(area_names))) if area_names else []
         # print("参照エリア:", selected_areas)
-        return "\n".join(area_names)
+        return "\n".join(areas_csv)
 
     @retry_on_failure()
     def generate_new_area(self, num_refered_areas=0, area_name=None):
