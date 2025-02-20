@@ -38,7 +38,7 @@ class BaseGenerator:
         with template_path.open(encoding="utf-8") as f:
             return f.read()
 
-    def generate(self, response_format, **kwargs):
+    def generate(self, response_format, temperature=1.5, max_tokens=8192, **kwargs):
         if not self.template:
             raise ValueError("テンプレートがロードされていません。")
         prompt = self.template.format(**kwargs)
@@ -50,7 +50,7 @@ class BaseGenerator:
             print("=====================")
         time.sleep(DEFAULT_WAIT_TIME)
         response = self.chat_client.get_response(
-            prompt, temperature=1.5, max_tokens=8192, response_format=response_format
+            prompt, temperature, max_tokens, response_format=response_format
         )
         if DEBUG_MODE:
             print("=== DEBUG: Response ===")
@@ -68,6 +68,7 @@ class BaseGenerator:
 
     def _add_to_csv(self, csv_path, csv_contents, headers=None):
         csv_path = Path(csv_path)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
         file_exists = csv_path.exists()
         with csv_path.open("a", encoding="utf-8", newline="") as file:
             writer = csv.writer(file, delimiter=',')

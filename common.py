@@ -2,7 +2,14 @@ from pathlib import Path
 import pandas as pd
 import json
 
-DATA_DIR = Path("data")
+from config import CHECK_RESULT_DIR, DATA_DIR
+
+def get_check_results_csv_path(area: str) -> Path:
+    """指定されたエリア名のCSVファイルパスを返す。"""
+    return CHECK_RESULT_DIR / f"{area}.csv"
+
+def get_data_path() -> Path:
+    return DATA_DIR
 
 def get_area_csv_path(area: str) -> Path:
     """指定されたエリア名のCSVファイルパスを返す。"""

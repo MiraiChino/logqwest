@@ -2,12 +2,14 @@ import json
 from pathlib import Path
 
 CONFIG_FILE = "prompt/config.json"
+CHECK_RESULT_DIR = Path("check_results")
 PROMPT_DIR = Path("prompt")
 DATA_DIR = Path("data") # generate.py で DATA_DIR を使うため、ここにも定義
 AREAS_CSV_FILE = DATA_DIR / "areas.csv"
 NEW_AREA_TEMPLATE_FILE = PROMPT_DIR / "new_area.txt"
 NEW_ADVENTURE_TEMPLATE_FILE = PROMPT_DIR / "new_adventure.txt"
 NEW_LOG_TEMPLATE_FILE = PROMPT_DIR / "new_log.txt"
+CHECK_LOG_TEMPLATE_FILE = PROMPT_DIR / "check_log.txt"
 
 # 設定ファイルのロード
 def load_config(config_file):

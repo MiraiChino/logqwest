@@ -109,7 +109,7 @@ def show_home(adventure_history):
     """ホーム画面を表示"""
     st.title("💎 Logqwest")
 
-    if 'run_button' in st.session_state and st.session_state.run_button == True:
+    if 'run_button' in st.session_state and st.session_state.run_button:
         st.session_state.running_adventure = True
     else:
         st.session_state.running_adventure = False
@@ -130,7 +130,7 @@ def show_home(adventure_history):
                 st.error(event["error"])
                 break
             elif event["type"] == "hiring":
-                hiring_message_html = f"<span style='color: #2ecc71;'>✦ 冒険者『{event['adventurer']}』を雇用しました。 ✦</span><br>"
+                hiring_message_html = f"<span style='color: #2ecc71;'>✦ 冒険者『{event['adventurer']}』を旅立たせました。 ✦</span><br>"
                 accumulated_messages += hiring_message_html
             elif event["type"] == "message":
                 time_html = f"<span style='color: gray; font-size:0.9em; margin-right:8px;'>{event['time']}</span>"

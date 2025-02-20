@@ -6,10 +6,9 @@ from llm import GeminiChat, GroqChat
 from config import (
     AREAS_CSV_FILE,
     CHAPTER_SETTINGS,
-    DATA_DIR # config_loader から DATA_DIR をインポート
 )
-from generator import AreaGenerator, AdventureGenerator, LogGenerator
-from common import get_area_csv_path, get_adventure_path
+from generators import AreaGenerator, AdventureGenerator, LogGenerator
+from common import get_area_csv_path, get_adventure_path, get_data_path
 
 
 def parse_arguments():
@@ -114,7 +113,7 @@ def load_existing_adventures_for_area(area_csv_path):
 
 def process_logs_content(log_generator):
     global DEBUG_MODE
-    areas_dir = DATA_DIR
+    areas_dir = get_data_path()
     area_dirs = [d for d in areas_dir.iterdir() if d.is_dir()]
     for area_dir in area_dirs:
         area_name = area_dir.name
@@ -141,7 +140,7 @@ def generate_logs_for_area(log_generator, area_name, area_csv_path):
                     continue
                 adventure_name, result, *chapters = row
                 adventure_txt_path = get_adventure_path(area_name, adventure_name)
-                temp_adventure_txt_path = adventure_txt_path.with_suffix(f".temp.txt")
+                temp_adventure_txt_path = adventure_txt_path.with_suffix(".temp.txt")
                 current_adventure_txt_path = temp_adventure_txt_path
                 if not adventure_txt_path.exists():
                     pre_log = None
@@ -172,8 +171,8 @@ def main():
     global DEBUG_MODE
     args = parse_arguments()
     DEBUG_MODE = args.debug  # グローバルにデバッグフラグを設定
-    import generator
-    generator.DEBUG_MODE = DEBUG_MODE
+    import generators
+    generators.DEBUG_MODE = DEBUG_MODE
 
     if args.client == "gemini":
         model_name = args.model if args.model else "models/gemini-2.0-flash-001"
@@ -184,15 +183,15 @@ def main():
     else:
         raise ValueError(f"不明なチャットクライアント: {args.client}")
 
-    area_generator = AreaGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
-    adventure_generator = AdventureGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
-    log_generator = LogGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
 
     if args.type == "area":
+        area_generator = AreaGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
         generate_area_content(area_generator, args.count)
     elif args.type == "adventures":
+        adventure_generator = AdventureGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
         process_adventures_content(adventure_generator, result_filter=args.result)
     elif args.type == "logs":
+        log_generator = LogGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
         process_logs_content(log_generator)
 
 
