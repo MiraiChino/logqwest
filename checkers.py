@@ -1,8 +1,9 @@
+import csv
 import json
 import re
 
 import json5
-from config import CHECK_LOG_TEMPLATE_FILE
+from config import CHECK_LOG_TEMPLATE_FILE, LOGCHECK_KEYS, LOGCHECK_HEADERS
 from generators import BaseGenerator
 from llm import TYPE_TEXT, retry_on_failure
 
@@ -11,28 +12,8 @@ class LogChecker(BaseGenerator):
     def __init__(self, chat_client, template_file=CHECK_LOG_TEMPLATE_FILE):
         super().__init__(chat_client, template_file)
         self.json_pattern = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
-        self.expected_keys = {
-            "整合性チェック": ["ストーリー展開", "冒険結果", "冒険目的とアイテム", "登場人物と場所", "戦闘と障害"],
-            "読みやすさチェック": ["言語と文体", "フォーマット", "内容"],
-            "日本語の自然さ・言語チェック": ["日本語の自然さ", "他言語混入"],
-            "時間表現チェック": ["現在進行形のストーリー", "絶対的な時間表現の排除"],
-        }
-        self.csv_headers = [ # CSVヘッダーを定義
-            "冒険名",
-            "ストーリー展開_評価", "ストーリー展開_理由",
-            "冒険結果_評価", "冒険結果_理由",
-            "冒険目的とアイテム_評価", "冒険目的とアイテム_理由",
-            "登場人物と場所_評価", "登場人物と場所_理由",
-            "戦闘と障害_評価", "戦闘と障害_理由",
-            "言語と文体_評価", "言語と文体_理由",
-            "フォーマット_評価", "フォーマット_理由",
-            "内容_評価", "内容_理由",
-            "日本語の自然さ_評価", "日本語の自然さ_理由",
-            "他言語混入_評価", "他言語混入_理由",
-            "現在進行形のストーリー_評価", "現在進行形のストーリー_理由",
-            "絶対的な時間表現の排除_評価", "絶対的な時間表現の排除_理由",
-            "総合評価"
-        ]
+        self.expected_keys = LOGCHECK_KEYS
+        self.csv_headers = LOGCHECK_HEADERS
 
     def extract(self, response):
         match = self.json_pattern.search(response)
@@ -83,8 +64,8 @@ class LogChecker(BaseGenerator):
         for section_keys in self.expected_keys.values(): # セクションごとのキーを処理
             for key in section_keys:
                 section_name = list(self.expected_keys.keys())[list(self.expected_keys.values()).index(section_keys)] # セクション名を取得
-                csv_row.append(json_data[section_name][key]["評価"])
-                csv_row.append(json_data[section_name][key]["理由"])
+                value = json_data[section_name][key]["評価"] + json_data[section_name][key]["理由"]
+                csv_row.append(value)
         csv_row.append(json_data["総合評価"])
         return csv_row
 
@@ -106,3 +87,27 @@ class LogChecker(BaseGenerator):
         if check_result_json and csv_path:
             self.save_check_result_csv(check_result_json, adv_name, csv_path)
         return check_result_json
+    
+    def sort_csv(self, file_path):
+        def sort_key(row):
+            match = re.match(r'^(失敗|成功|大成功)(\d+)_', row[0])
+            if match:
+                prefix, number = match.groups()
+                number = int(number)
+            else:
+                prefix, number = '', 0
+            prefix_order = {
+                '失敗': 0,
+                '成功': 1,
+                '大成功': 2
+            }
+            return (prefix_order.get(prefix, 3), number)
+        with open(file_path, 'r', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            headers = next(reader)
+            rows = [row for row in reader if row]
+        rows.sort(key=sort_key)
+        with open(file_path, 'w', encoding='utf-8', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+            writer.writerows(rows)

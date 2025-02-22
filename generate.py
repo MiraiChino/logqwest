@@ -90,15 +90,17 @@ def add_adventures_for_area(adventure_generator, area_name, result_filter=None):
 
     area_csv_path = get_area_csv_path(area_name)
     already_exist_adventures_in_area = load_existing_adventures_for_area(area_csv_path)
+    debug_done = False
     for adventure_type in adventure_types:
         for idx, num in enumerate(adventure_type["nums"]):
             adventure_name = f"{adventure_type['result']}{num}_{area_name}"
             if adventure_name not in already_exist_adventures_in_area:
                 adventure_generator.generate_new_adventure(adventure_name, adventure_type["result"], area_name)
                 print(f"✅ 冒険: {adventure_name}")
-            if DEBUG_MODE:
-                break  # DEBUG_MODE 時は1件のみ実行
-        if DEBUG_MODE:
+                if DEBUG_MODE:
+                    debug_done = True
+                    break  # DEBUG_MODE 時は1件のみ実行
+        if debug_done:
             break
 
 

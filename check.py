@@ -43,6 +43,9 @@ def process_check_content(log_checker):
         area_csv_path = get_area_csv_path(area_name)
         if area_csv_path.exists():
             check_logs_for_area(log_checker, area_name, area_csv_path)
+            check_results_csv_path = get_check_results_csv_path(area=area_name)
+            if check_results_csv_path.exists():
+                log_checker.sort_csv(check_results_csv_path)
             if DEBUG_MODE:
                 break  # DEBUG_MODE 時は最初の1エリアのみ実行
 

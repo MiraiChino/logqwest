@@ -109,9 +109,17 @@ class AreaGenerator(BaseGenerator):
             return ""
         
         def treasure_name(data):
-            return data["財宝"].split(":")[0]
+            return data[CSV_HEADERS_AREA[4]].split(":")[0]
         
-        areas_csv = [f"{area_name},{treasure_name(data)}" for area_name, data in self.areas.items()]
+        def waypoint_name(data):
+            entries = data[CSV_HEADERS_AREA[9]].split(';')
+            return ';'.join(entry.split(":", 1)[0].strip() for entry in entries if ":" in entry)
+        
+        def city_names(data):
+            entries = data[CSV_HEADERS_AREA[10]].split(';')
+            return ';'.join(entry.split(":", 1)[0].strip() for entry in entries if ":" in entry)
+        
+        areas_csv = [f"{area_name},{treasure_name(data)},{waypoint_name(data)},{city_names(data)}" for area_name, data in self.areas.items()]
         # selected_areas = random.sample(area_names, min(num_refered_areas, len(area_names))) if area_names else []
         # print("参照エリア:", selected_areas)
         return "\n".join(areas_csv)
@@ -156,7 +164,7 @@ class AreaGenerator(BaseGenerator):
                 if all(isinstance(item, str) for item in value):
                     data[field] = ''.join(value)
                 elif all(isinstance(item, dict) for item in value):
-                    data[field] = ' '.join(": ".join(d.values()) for d in value)
+                    data[field] = ';'.join(": ".join(d.values()) for d in value)
                 else:
                     raise ValueError(f"'{field}'はlist型かstring型かdictのlist型である必要があります {type(value)}")
             elif isinstance(value, dict):
@@ -253,7 +261,7 @@ class AdventureGenerator(BaseGenerator):
         if not root_keys.issubset(data.keys()):
             raise ValueError(f"ルートキーが不足しています。必須キー: {root_keys}")
         chapters = data.get("chapters", [])
-        if len(chapters) != 8:
+        if len(chapters) != len(CHAPTER_SETTINGS):
             raise ValueError(f"章の数が無効です: {len(chapters)}/8")
         for i, chapter in enumerate(chapters, 1):
             if not isinstance(chapter, dict):
@@ -303,16 +311,25 @@ class LogGenerator(BaseGenerator):
         self.areas = self._load_areas()
 
     def _generate_area_header_keywords(self):
-        return {
-            CSV_HEADERS_AREA[4]: r"([^:]+):", # "生物名:" 形式
-            CSV_HEADERS_AREA[6]: r"([^:]+):", # "生物名:" 形式
-            CSV_HEADERS_AREA[7]: r"([^:]+):", # "アイテム名:" 形式
-            CSV_HEADERS_AREA[8]: r"([^:]+)", # 財宝名 (シンプルな名詞)
-        }
+        return [
+            CSV_HEADERS_AREA[4],
+            CSV_HEADERS_AREA[6],
+            CSV_HEADERS_AREA[7],
+            CSV_HEADERS_AREA[8],
+            CSV_HEADERS_AREA[9],
+            CSV_HEADERS_AREA[10],
+            CSV_HEADERS_AREA[11],
+            CSV_HEADERS_AREA[12],
+        ]
 
     def _load_areas(self):
         areas = {}
         areas_csv_path = Path(self.all_areas_csv_path)
+
+        def keywords_dict(header_text):
+            entries = header_text.split(';')
+            return {entry.split(":")[0].strip(): entry.split(":")[1].strip() for entry in entries if ":" in entry}
+        
         if areas_csv_path.exists():
             with areas_csv_path.open("r", encoding="utf-8") as file:
                 reader = csv.reader(file)
@@ -320,9 +337,9 @@ class LogGenerator(BaseGenerator):
                 for row in reader:
                     if len(row) == len(CSV_HEADERS_AREA):
                         area_data = dict(zip(CSV_HEADERS_AREA, row))
-                        for header, keyword_regex in self.area_header_keywords.items(): # 各ヘッダーに対してキーワード抽出
+                        for header in self.area_header_keywords: # 各ヘッダーに対してキーワード抽出
                             header_text = area_data.get(header, "")
-                            keywords = [name.strip() for name in re.findall(keyword_regex, header_text)] # 正規表現でキーワード抽出
+                            keywords = keywords_dict(header_text)
                             area_data[f"{header}_keywords"] = keywords # キーワードリストをarea_dataに追加 (例: "生息する無害な生物_keywords")
                         areas[row[0]] = area_data # エリア名をキーとして辞書を保存
         return areas
@@ -365,14 +382,12 @@ class LogGenerator(BaseGenerator):
         area_info_text = "### （参考）エリア情報の活用：  \n  エリア情報を、**物語の背景、イベント、オブジェクト、登場人物、会話などに自然に組み込んでください。**  冒険者がエリア情報を直接的に語るのではなく、**体験を通して**エリア情報が**間接的に**読者に伝わるように工夫してください。\n"
         are_info_added = False
         for header in CSV_HEADERS_AREA: # すべてのヘッダーをチェック
-            keywords = area_info.get(f"{header}_keywords", []) # キーワードリストを取得 (例: "生息する無害な生物_keywords")
-            if keywords: # キーワードリストが存在する場合のみチェック
-                for keyword in keywords:
+            keywords_dict = area_info.get(f"{header}_keywords", []) # キーワードリストを取得 (例: "生息する無害な生物_keywords")
+            if keywords_dict: # キーワードリストが存在する場合のみチェック
+                for keyword, keyword_text in keywords_dict.items():
                     if keyword.lower() in chapter_text.lower(): # 章テキストにキーワードが含まれているか確認 (小文字で比較)
-                        area_value = area_info.get(header) # ヘッダーに対応するテキスト全体を取得
-                        if area_value:
-                            area_info_text += f"  - {header}: {area_value}\n" # 文字列として整形
-                            are_info_added = True
+                        area_info_text += f"  - {keyword}: {keyword_text}\n" # 文字列として整形
+                        are_info_added = True
 
         if are_info_added: # 何か情報が追加された場合のみarea_infoをkwargsに追加
             kwargs["area_info"] = area_info_text.strip() # 余分な改行を削除

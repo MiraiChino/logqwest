@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from urllib.parse import urlencode
 
-from common import DATA_DIR, get_area_csv_path, get_adventure_path, load_csv
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_check_results_csv_path, load_csv, delete_adventures
 
 # --------------------------------------------------
 # キャッシュ関数
@@ -40,14 +40,21 @@ def is_area_complete(area: str) -> bool:
     csv_path = get_area_csv_path(area)
     if not csv_path.exists():
         return False
+    check_csv_path = get_check_results_csv_path(area)
+    if not check_csv_path.exists():
+        return False
     df_area = cached_load_csv(csv_path)
+    df_checkarea = cached_load_csv(check_csv_path)
     if df_area is None or "冒険名" not in df_area.columns:
+        return False
+    if df_checkarea is None or "冒険名" not in df_area.columns:
         return False
     total_adv = len(df_area)
     if total_adv == 0:
         return False
     complete_adv = sum(1 for adv in df_area["冒険名"] if is_adventure_complete(area, adv))
-    return total_adv == complete_adv
+    check_adv = sum(1 for adv in df_checkarea["冒険名"])
+    return total_adv == complete_adv == check_adv
 
 def update_query_params(area: str, adv: str = ""):
     """
@@ -72,7 +79,37 @@ def render_df(df: pd.DataFrame) -> str:
     DataFrameをHTMLテーブルに変換する。
     すべてのセルの縦位置を上揃えにするスタイルを適用する。
     """
-    return df.style.set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
+    return df.style.hide().set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
+
+def render_df_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    DataFrameの各行の先頭にStreamlitのチェックボックスを追加して表示し、
+    選択された行のみを返す関数です。
+    """
+    st.session_state.selected_indices = []
+    
+    st.markdown("### データテーブル")
+    # ヘッダーを表示（チェックボックス列は「選択」）
+    header_cols = st.columns([0.5] + [1] * len(df.columns))
+    with header_cols[0]:
+        st.write("選択")
+    for col, header in zip(header_cols[1:], df.columns):
+        with col:
+            st.write(header)
+    
+    # 各行を表示（チェックボックスとデータ列）
+    for idx, row in df.iterrows():
+        row_cols = st.columns([0.5] + [1] * len(row))
+        with row_cols[0]:
+            # 各行に対してチェックボックスを表示。チェックされたらその行番号を記録。
+            if st.checkbox("check", key=f"checkbox_{idx}", label_visibility="collapsed"):
+                st.session_state.selected_indices.append(idx)
+        for value, col in zip(row, row_cols[1:]):
+            with col:
+                st.write(value)
+    
+    # 選択された行のみを抽出して返す
+    return df.loc[st.session_state.selected_indices]
 
 def show_progress(ratio: float, label: str):
     """
@@ -131,7 +168,6 @@ def sidebar_navigation(area_names: list):
                 )
             else:
                 st.caption(area) # CSVが存在しない場合はリンクなしで表示
-
 
 # --------------------------------------------------
 # データフレーム操作関数
@@ -207,7 +243,6 @@ def display_area_list(df_areas: pd.DataFrame):
                 st.rerun()
         else:
             st.button("次へ", disabled=True)
-
 
 def display_adventure_detail(selected_area: str, selected_adv: str):
     """
@@ -287,10 +322,45 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
                     st.markdown(render_df(df_clickable_adv), unsafe_allow_html=True)
                 else:
                     st.write("該当する冒険はありません。") # データがない場合のメッセージ
+
+        display_check_results(selected_area, len(df_adv_original))
+
     elif df_adv_original is not None:
         st.markdown(render_df(df_adv_original), unsafe_allow_html=True)
     else:
         st.write("エリアのデータが見つかりません。")
+
+def display_check_results(area: str, len_results: int):
+    """
+    指定されたエリアのチェック結果CSVファイルを読み込み、
+    評価項目とその理由をStreamlitでDataFrameとして表示する。
+    行選択と削除機能を追加。
+    """
+    check_results_csv_path = get_check_results_csv_path(area)
+    df_check_results_original = cached_load_csv(check_results_csv_path)
+
+    if df_check_results_original is not None:
+        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{len_results})", expanded=True):
+
+            # HTMLテーブル表示 
+            selected_df = render_df_with_checkbox(df_check_results_original)
+            if selected_df.empty:
+                st.write("ℹ️ 削除するには行を選択してください。")
+            else:
+                if st.button("🔥 選択行を削除", key=f"delete_check_results_{area}"):
+                    advs_to_delete = selected_df["冒険名"].values.tolist()
+                    st.write(selected_df["冒険名"])
+                    for text in delete_adventures(area, advs_to_delete):
+                        st.write(text)
+
+                    st.cache_data.clear()
+                    st.rerun() # rerunして最新データを読み込み直す
+                else:
+                    st.write(selected_df["冒険名"])
+                
+    else:
+        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
+
 
 # --------------------------------------------------
 # メイン処理
