@@ -1,121 +1,137 @@
 import streamlit as st
 import pandas as pd
 from urllib.parse import urlencode
+from pathlib import Path
+from typing import Optional, List
 
 from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_check_results_csv_path, load_csv, delete_adventures
+from config import LOGCHECK_HEADERS
 
 # --------------------------------------------------
-# キャッシュ関数
+# 設定
+# --------------------------------------------------
+AREAS_CSV_FILENAME = "areas.csv"
+ADVENTURE_DETAIL_LINE_THRESHOLD = 160  # 冒険詳細ファイルの完了行数閾値
+CHECK_MARK = "✅"
+SUCCESS_EMOJI = "❗"
+
+# --------------------------------------------------
+# ヘルパー関数（データ処理）
 # --------------------------------------------------
 @st.cache_data
-def cached_load_csv(csv_path):
-    """
-    load_csv 関数をキャッシュする。
-    """
+def cached_load_csv(csv_path: Path) -> Optional[pd.DataFrame]:
+    """CSVファイルを読み込む。キャッシュを利用。"""
     return load_csv(csv_path)
 
+def save_csv(df: pd.DataFrame, csv_path: Path):
+    """CSVファイルを保存する。"""
+    try:
+        df.to_csv(csv_path, encoding="utf-8", index=False)
+    except Exception as e:
+        st.error(f"CSVファイルの保存に失敗しました: {csv_path} - {e}")
+
+def filter_dataframe(df: pd.DataFrame, keyword: str, column_name: str) -> pd.DataFrame:
+    """データフレームを指定されたキーワードでフィルタリングする。"""
+    if not keyword:
+        return df
+    return df[df[column_name].str.contains(keyword, case=False, na=False)].copy()
+
 # --------------------------------------------------
-# チェック処理・クエリパラメータ更新関数
+# チェック処理関数
 # --------------------------------------------------
-def is_adventure_complete(area: str, adv: str) -> bool:
-    """
-    冒険詳細ファイルが存在し、その中身が160行以上ある場合にTrueを返す。
-    """
-    path = get_adventure_path(area, adv)
-    if not path.exists():
+def is_adventure_complete(area: str, adventure_name: str) -> bool:
+    """冒険詳細ファイルが存在し、内容が指定行数以上の場合にTrueを返す。"""
+    adventure_path = get_adventure_path(area, adventure_name)
+    if not adventure_path.exists():
         return False
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(adventure_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-        return len(lines) >= 160
+        return len(lines) >= ADVENTURE_DETAIL_LINE_THRESHOLD
     except Exception:
         return False
 
 def is_area_complete(area: str) -> bool:
     """
-    エリアCSVファイルが存在し、かつそのCSV内のすべての冒険詳細ファイルが
-    存在し内容が160行以上の場合に True を返す。
-    存在しない、または冒険データが不足している場合は False を返す。
+    エリア内の全ての冒険が完了し、かつチェック結果CSVの行数も一致するか判定する。
+    完了とは、冒険詳細ファイルが存在し、内容が指定行数以上であること。
     """
-    csv_path = get_area_csv_path(area)
-    if not csv_path.exists():
-        return False
-    check_csv_path = get_check_results_csv_path(area)
-    if not check_csv_path.exists():
-        return False
-    df_area = cached_load_csv(csv_path)
-    df_checkarea = cached_load_csv(check_csv_path)
-    if df_area is None or "冒険名" not in df_area.columns:
-        return False
-    if df_checkarea is None or "冒険名" not in df_area.columns:
-        return False
-    total_adv = len(df_area)
-    if total_adv == 0:
-        return False
-    complete_adv = sum(1 for adv in df_area["冒険名"] if is_adventure_complete(area, adv))
-    check_adv = sum(1 for adv in df_checkarea["冒険名"])
-    return total_adv == complete_adv == check_adv
+    area_csv_path = get_area_csv_path(area)
+    df_area = cached_load_csv(area_csv_path)
+    check_results_csv_path = get_check_results_csv_path(area)
+    df_check_results = cached_load_csv(check_results_csv_path)
 
-def update_query_params(area: str, adv: str = ""):
-    """
-    クエリパラメータにキー "area" と "adv" をセットする。
-    これによりURLを更新する。
-    """
-    st.query_params["area"] = area
-    st.query_params["adv"] = adv
+    if (df_area is None or "冒険名" not in df_area.columns or df_area.empty):
+        return False
 
-def set_current_area(area: str):
+    total_adventures = len(df_area)
+    completed_adventures_count = sum(1 for adv in df_area["冒険名"] if is_adventure_complete(area, adv))
+    checked_adventures_count = len(df_check_results) if df_check_results is not None else 0 # チェック結果CSVがない場合は0
+
+    return total_adventures == completed_adventures_count == checked_adventures_count
+
+def is_area_all_checked(area: str) -> bool:
     """
-    セッションステートの現在のエリア（ページ）を設定し、クエリパラメータも更新する。
+    エリアの check_results_csv のチェック内容が全て✅で始まっているか確認する。
+    冒険の完了状態やチェック結果CSVの行数は見ない。
     """
-    st.session_state.current_area = area
-    update_query_params(area, adv="")
+    check_results_csv_path = get_check_results_csv_path(area)
+    df_check_results = cached_load_csv(check_results_csv_path)
+
+    if df_check_results is None or df_check_results.empty:
+        return False
+
+    check_columns = LOGCHECK_HEADERS[2:-1] # 'ログ', '成否' 列をチェック
+    for _, row in df_check_results.iterrows():
+        for col in check_columns:
+            if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
+                return False
+
+    return True # 全ての項目が✅で始まっていればTrueを返す
+
+# --------------------------------------------------
+# ラベル生成関数
+# --------------------------------------------------
+def generate_area_label(area: str) -> str:
+    """エリアの状態に基づいたラベルを生成する。"""
+    if is_area_complete(area):
+        if is_area_all_checked(area):
+            return f"{CHECK_MARK}{area}"
+        else:
+            return f"{SUCCESS_EMOJI}{area}"
+    else:
+        return area
 
 # --------------------------------------------------
 # 表示系ヘルパー関数
 # --------------------------------------------------
-def render_df(df: pd.DataFrame) -> str:
-    """
-    DataFrameをHTMLテーブルに変換する。
-    すべてのセルの縦位置を上揃えにするスタイルを適用する。
-    """
-    return df.style.hide().set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
+def render_dataframe_as_html(df: pd.DataFrame) -> str:
+    """DataFrameをHTMLテーブルに変換する。"""
+    return df.style.hide(axis="index").set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
 
-def render_df_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    DataFrameの各行の先頭にStreamlitのチェックボックスを追加して表示し、
-    選択された行のみを返す関数です。
-    """
-    st.session_state.selected_indices = []
-    
+def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
+    """DataFrameに行選択チェックボックスを表示し、選択された行を返す。"""
     st.markdown("### データテーブル")
-    # ヘッダーを表示（チェックボックス列は「選択」）
     header_cols = st.columns([0.5] + [1] * len(df.columns))
     with header_cols[0]:
         st.write("選択")
     for col, header in zip(header_cols[1:], df.columns):
         with col:
             st.write(header)
-    
-    # 各行を表示（チェックボックスとデータ列）
+
+    selected_indices = []
     for idx, row in df.iterrows():
         row_cols = st.columns([0.5] + [1] * len(row))
         with row_cols[0]:
-            # 各行に対してチェックボックスを表示。チェックされたらその行番号を記録。
-            if st.checkbox("check", key=f"checkbox_{idx}", label_visibility="collapsed"):
-                st.session_state.selected_indices.append(idx)
+            if st.checkbox("選択", key=f"checkbox_{idx}", label_visibility="collapsed"):
+                selected_indices.append(idx)
         for value, col in zip(row, row_cols[1:]):
             with col:
                 st.write(value)
-    
-    # 選択された行のみを抽出して返す
-    return df.loc[st.session_state.selected_indices]
+    return df.loc[selected_indices] if selected_indices else pd.DataFrame() # 選択行がない場合、空のDataFrameを返す
 
-def show_progress(ratio: float, label: str):
-    """
-    プログレスバーとそのラベルを表示する。
-    ratioが 1.0（100%）の場合は、プログレスバーの色を緑色に変更する。
-    """
+def display_progress_bar(ratio: float, label: str):
+    """プログレスバーとラベルを表示する。完了時には色を変更。"""
     if ratio == 1.0:
         st.markdown(
             """
@@ -130,149 +146,98 @@ def show_progress(ratio: float, label: str):
     st.write(label)
     st.progress(ratio)
 
-def sidebar_navigation(area_names: list):
-    """
-    サイドバーにナビゲーションを構築する。
-    「エリア一覧」と各エリアのキャプションリンクを表示。
-    エリア名は名前順にソートし、フィルタ機能も追加。
-    """
-    with st.sidebar:
-        query_params = {"area": "エリア一覧"}
-        link_url = f"?{urlencode(query_params)}"
-        if st.button("🔄 更新"):
-            st.cache_data.clear()
-            st.rerun() # rerunして最新データを読み込み直す
-        st.caption(
-            f'<a href="{link_url}" target="_self">📖全エリア一覧</a>',
-            unsafe_allow_html=True,
-        )
+# --------------------------------------------------
+# ナビゲーション関数
+# --------------------------------------------------
+def update_query_params(area: str = "", adventure: str = ""):
+    """クエリパラメータを更新する。"""
+    params = {}
+    if area:
+        params["area"] = area
+    if adventure:
+        params["adv"] = adventure
+    st.query_params.update(params)
 
-        # **エリア名フィルタ**
-        filter_keyword = st.text_input("🔎", "", placeholder="🔎", label_visibility="collapsed")
+def set_current_area(area: str):
+    """セッションステートとクエリパラメータを更新し、現在のエリアを設定する。"""
+    st.session_state.current_area = area
+    update_query_params(area=area)
+
+def sidebar_navigation(area_names: List[str]):
+    """サイドバーナビゲーションを構築する。"""
+    with st.sidebar:
+        if st.button("🔄 データ更新"):
+            st.cache_data.clear()
+            st.rerun()
+
+        st.caption('<a href="?area=エリア一覧" target="_self">📖全エリア一覧</a>', unsafe_allow_html=True)
+
+        filter_keyword = st.text_input("🔎 エリア名でフィルタ", "", placeholder="エリア名で検索", label_visibility="collapsed")
         filtered_area_names = filter_dataframe(
             pd.DataFrame({"エリア名": area_names}), filter_keyword, "エリア名"
         )["エリア名"].tolist()
-
-        # **エリア名を名前順にソート**
         sorted_area_names = sorted(filtered_area_names)
 
-        for area in sorted_area_names: # ソート済みのエリア名を使用
-            csv_path = get_area_csv_path(area)
-            if csv_path.exists():
-                label = f"✅{area}" if is_area_complete(area) else area
-                query_params = {"area": area}
-                link_url = f"?{urlencode(query_params)}"
-                st.caption(
-                    f'<a href="{link_url}" target="_self">{label}</a>',
-                    unsafe_allow_html=True,
-                )
+        for area in sorted_area_names:
+            area_csv_path = get_area_csv_path(area)
+            label = generate_area_label(area)
+            if area_csv_path.exists():
+                st.caption(f'<a href="?area={area}" target="_self">{label}</a>', unsafe_allow_html=True)
             else:
-                st.caption(area) # CSVが存在しない場合はリンクなしで表示
+                st.caption(area)
 
 # --------------------------------------------------
-# データフレーム操作関数
+# ページ表示関数
 # --------------------------------------------------
-def filter_dataframe(df: pd.DataFrame, filter_keyword: str, column_name: str) -> pd.DataFrame:
-    """
-    データフレームを指定されたキーワードでフィルタリングする。
-    """
-    if not filter_keyword:
-        return df
-    return df[df[column_name].str.contains(filter_keyword, case=False, na=False)].copy()
-
-def paginate_dataframe(df: pd.DataFrame, items_per_page: int, page_num: int) -> pd.DataFrame: # display_area_pageでページネーションを廃止したので削除
-    """
-    データフレームをページネーションする。
-    """
-    start_index = (page_num - 1) * items_per_page
-    end_index = start_index + items_per_page
-    return df.iloc[start_index:end_index].copy()
-
-# --------------------------------------------------
-# ページ表示用関数
-# --------------------------------------------------
-def display_area_list(df_areas: pd.DataFrame):
-    """
-    「エリア一覧」ページを表示する。
-    各エリア名は、CSVが存在する場合はリンク化され、すべての冒険詳細ファイルが揃っている場合は先頭に✅が付く。
-    また、ページ上部にエリアデータの存在率をプログレスバーで表示する。
-    ページネーション機能とフィルタ機能を追加。
-    """
+def display_area_list_page(df_areas: pd.DataFrame):
+    """「エリア一覧」ページを表示する。"""
     st.title("📖全エリア一覧")
 
     total_areas = len(df_areas)
-    complete_areas = sum(1 for area in df_areas["エリア名"] if is_area_complete(area))
-    ratio = complete_areas / total_areas if total_areas > 0 else 0
-    show_progress(ratio, f"エリアデータ存在数: {complete_areas} / {total_areas}")
-    df_areas_sorted = df_areas.sort_values(by="エリア名").reset_index(drop=True)
+    completed_areas_count = sum(1 for area in df_areas["エリア名"] if is_area_complete(area))
+    ratio = completed_areas_count / total_areas if total_areas > 0 else 0
+    display_progress_bar(ratio, f"エリアデータ存在数: {completed_areas_count} / {total_areas}")
 
-    # **フィルタリング**
-    filter_keyword = st.text_input("エリア名でフィルタ (部分一致)", "", placeholder="🔎", label_visibility="collapsed")
+    df_areas_sorted = df_areas.sort_values(by="エリア名").reset_index(drop=True)
+    filter_keyword = st.text_input("エリア名フィルタ", "", placeholder="エリア名でフィルタ", label_visibility="collapsed")
     df_areas_filtered = filter_dataframe(df_areas_sorted, filter_keyword, "エリア名")
 
-    # **ページネーション**
-    items_per_page = 10
-    if "area_list_page_num" not in st.session_state:
-        st.session_state.area_list_page_num = 1
-    page_num = st.session_state.area_list_page_num
-    df_paged_areas = paginate_dataframe(df_areas_filtered, items_per_page, page_num)
-    num_pages = (len(df_areas_filtered) + items_per_page - 1) // items_per_page
-
-    df_clickable = df_paged_areas.copy()
+    df_clickable = df_areas_filtered.copy()
     df_clickable["エリア名"] = df_clickable["エリア名"].apply(
-        lambda x: (f'<a href="?area={x}" target="_self">{"✅" + x if is_area_complete(x) else x}</a>')
-        if get_area_csv_path(x).exists() else x
+        lambda area: (f'<a href="?area={area}" target="_self">{generate_area_label(area)}</a>')
+        if get_area_csv_path(area).exists() else area
     )
-    st.markdown(render_df(df_clickable), unsafe_allow_html=True)
+    st.markdown(render_dataframe_as_html(df_clickable), unsafe_allow_html=True)
 
-    # ページネーション UI
-    col_prev, col_page_num, col_next = st.columns([1, 1, 1])
-    with col_prev:
-        if page_num > 1:
-            if st.button("前へ", key="area_list_prev"):
-                st.session_state.area_list_page_num -= 1
-                st.rerun()
-        else:
-            st.button("前へ", disabled=True)
-    with col_page_num:
-        st.write(f"ページ {page_num} / {num_pages}")
-    with col_next:
-        if page_num < num_pages:
-            if st.button("次へ", key="area_list_next"):
-                st.session_state.area_list_page_num += 1
-                st.rerun()
-        else:
-            st.button("次へ", disabled=True)
 
-def display_adventure_detail(selected_area: str, selected_adv: str):
-    """
-    冒険詳細ページを表示する。
-    エリアCSVから該当の冒険情報行を抽出し、
-    対応するテキストファイルの内容も表示する。
-    「戻る」ボタンでエリアページへ遷移する。
-    """
-    st.title(f"{selected_area} - {selected_adv} 詳細")
+def display_adventure_detail_page(selected_area: str, selected_adventure: str):
+    """冒険詳細ページを表示する。"""
+    st.title(f"{selected_area} - {selected_adventure} 詳細")
 
-    csv_path = get_area_csv_path(selected_area)
-    df_area = cached_load_csv(csv_path)
+    area_csv_path = get_area_csv_path(selected_area)
+    df_area = cached_load_csv(area_csv_path)
+
     if df_area is not None:
-        adv_row = df_area[df_area["冒険名"] == selected_adv]
-        if not adv_row.empty:
+        adventure_row = df_area[df_area["冒険名"] == selected_adventure]
+        if not adventure_row.empty:
             st.markdown("**冒険情報**")
-            st.markdown(render_df(adv_row), unsafe_allow_html=True)
+            st.markdown(render_dataframe_as_html(adventure_row), unsafe_allow_html=True)
         else:
             st.write("該当の冒険情報は見つかりません。")
     else:
         st.write("エリアのデータが存在しません。")
 
     st.markdown("**冒険詳細 (テキストファイル)**")
-    adventure_file_path = get_adventure_path(selected_area, selected_adv)
+    adventure_file_path = get_adventure_path(selected_area, selected_adventure)
     if adventure_file_path.exists():
-        with open(adventure_file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        # 行ごとに分割し、行番号を付与
-        numbered_content = "\n".join(f"{i+1}. {line}" for i, line in enumerate(content.splitlines()))
-        st.text(numbered_content)
+        try:
+            with open(adventure_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            numbered_content = "\n".join(f"{i+1}. {line}" for i, line in enumerate(content.splitlines()))
+            st.text(numbered_content)
+        except Exception as e:
+            st.error(f"冒険詳細ファイルの読み込みに失敗しました: {adventure_file_path} - {e}")
+
     else:
         st.write("該当の冒険データが存在しません。")
 
@@ -280,84 +245,69 @@ def display_adventure_detail(selected_area: str, selected_adv: str):
         set_current_area(selected_area)
         st.rerun()
 
+
 def display_area_page(selected_area: str, df_areas: pd.DataFrame):
-    """
-    各エリアページを表示する。
-    ページ冒頭にエリア一覧（areas.csv）の対象エリア情報を表示し、
-    その下に該当エリア内の冒険一覧を「失敗」「成功」「大成功」のExpanderで表示する。
-    Expanderラベルに冒険結果ごとの完了数を表示。
-    ページネーションは廃止。
-    """
+    """エリアページを表示する。"""
     st.title(f"{selected_area} のデータ")
 
-    # 冒険一覧の表示
-    csv_path = get_area_csv_path(selected_area)
-    df_adv_original = cached_load_csv(csv_path)
-    if df_adv_original is not None and "冒険名" in df_adv_original.columns and "結果" in df_adv_original.columns:
-        total_adv = len(df_adv_original)
-        complete_adv_total = sum(1 for adv in df_adv_original["冒険名"] if is_adventure_complete(selected_area, adv)) # 全冒険の完了数
-        ratio = complete_adv_total / total_adv if total_adv > 0 else 0
-        show_progress(ratio, f"冒険データ存在数: {complete_adv_total} / {total_adv}") # 全体のプログレスバー表示
+    area_csv_path = get_area_csv_path(selected_area)
+    df_adventures_original = cached_load_csv(area_csv_path)
 
-        # エリア情報の表示
+    if df_adventures_original is not None and "冒険名" in df_adventures_original.columns and "結果" in df_adventures_original.columns:
+        total_adventures = len(df_adventures_original)
+        completed_adventures_total = sum(1 for adv in df_adventures_original["冒険名"] if is_adventure_complete(selected_area, adv))
+        ratio = completed_adventures_total / total_adventures if total_adventures > 0 else 0
+        display_progress_bar(ratio, f"冒険データ存在数: {completed_adventures_total} / {total_adventures}")
+
         area_info = df_areas[df_areas["エリア名"] == selected_area]
         if not area_info.empty:
             with st.expander("エリア情報", expanded=True):
-                st.markdown(render_df(area_info), unsafe_allow_html=True)
+                st.markdown(render_dataframe_as_html(area_info), unsafe_allow_html=True)
         else:
             st.write("エリア情報が存在しません。")
 
-        # 冒険結果の種類を取得
-        results = ["失敗", "成功", "大成功"]
-
-        for result in results:
-            df_result = df_adv_original[df_adv_original["結果"] == result] # 結果でフィルタリング
-            complete_adv_result = sum(1 for adv in df_result["冒険名"] if is_adventure_complete(selected_area, adv)) # 結果ごとの完了数
-            with st.expander(f"冒険結果: {result} ({complete_adv_result}/{len(df_result)})"):
-                if not df_result.empty: # 結果に該当するデータが存在する場合のみ表示
+        adventure_results = ["失敗", "成功", "大成功"]
+        for result in adventure_results:
+            df_result = df_adventures_original[df_adventures_original["結果"] == result]
+            completed_adventures_result = sum(1 for adv in df_result["冒険名"] if is_adventure_complete(selected_area, adv))
+            with st.expander(f"冒険結果: {result} ({completed_adventures_result}/{len(df_result)})"):
+                if not df_result.empty:
                     df_clickable_adv = df_result.copy()
                     df_clickable_adv["冒険名"] = df_clickable_adv["冒険名"].apply(
-                        lambda adv: f'<a href="?area={selected_area}&adv={adv}" target="_self">{"✅" + adv if is_adventure_complete(selected_area, adv) else adv}</a>'
+                        lambda adv: f'<a href="?area={selected_area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(selected_area, adv) else adv}</a>'
                     )
-                    st.markdown(render_df(df_clickable_adv), unsafe_allow_html=True)
+                    st.markdown(render_dataframe_as_html(df_clickable_adv), unsafe_allow_html=True)
                 else:
-                    st.write("該当する冒険はありません。") # データがない場合のメッセージ
+                    st.write("該当する冒険はありません。")
 
-        display_check_results(selected_area, len(df_adv_original))
+        display_check_results_section(selected_area, len(df_adventures_original))
 
-    elif df_adv_original is not None:
-        st.markdown(render_df(df_adv_original), unsafe_allow_html=True)
+    elif df_adventures_original is not None:
+        st.markdown(render_dataframe_as_html(df_adventures_original), unsafe_allow_html=True)
     else:
         st.write("エリアのデータが見つかりません。")
 
-def display_check_results(area: str, len_results: int):
-    """
-    指定されたエリアのチェック結果CSVファイルを読み込み、
-    評価項目とその理由をStreamlitでDataFrameとして表示する。
-    行選択と削除機能を追加。
-    """
+
+def display_check_results_section(area: str, total_results_count: int):
+    """チェック結果セクションを表示し、削除機能を提供する。"""
     check_results_csv_path = get_check_results_csv_path(area)
     df_check_results_original = cached_load_csv(check_results_csv_path)
 
     if df_check_results_original is not None:
-        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{len_results})", expanded=True):
-
-            # HTMLテーブル表示 
-            selected_df = render_df_with_checkbox(df_check_results_original)
+        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{total_results_count})", expanded=True):
+            selected_df = display_dataframe_with_checkbox(df_check_results_original)
             if selected_df.empty:
                 st.write("ℹ️ 削除するには行を選択してください。")
             else:
                 if st.button("🔥 選択行を削除", key=f"delete_check_results_{area}"):
-                    advs_to_delete = selected_df["冒険名"].values.tolist()
-                    st.write(selected_df["冒険名"])
-                    for text in delete_adventures(area, advs_to_delete):
-                        st.write(text)
-
+                    adventures_to_delete = selected_df["冒険名"].tolist()
+                    delete_messages = delete_adventures(area, adventures_to_delete)
+                    for message in delete_messages:
+                        st.write(message)
                     st.cache_data.clear()
-                    st.rerun() # rerunして最新データを読み込み直す
+                    st.rerun()
                 else:
                     st.write(selected_df["冒険名"])
-                
     else:
         st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
 
@@ -372,17 +322,15 @@ def main():
         layout="wide",
     )
 
-    # セッションステートの初期設定（初回アクセス時は「エリア一覧」に設定）
     if "current_area" not in st.session_state:
         st.session_state.current_area = "エリア一覧"
 
-    # クエリパラメータから現在のエリアを取得（存在する場合）
     query_params = st.query_params
-    if "area" in query_params and query_params["area"]:
-        st.session_state.current_area = query_params["area"]
+    selected_area = query_params.get("area", st.session_state.current_area)
+    selected_adventure = query_params.get("adv", "")
+    st.session_state.current_area = selected_area # クエリパラメータでエリアが指定されていなくても、セッションステートを更新
 
-    # エリア一覧CSVの読み込み
-    df_areas = cached_load_csv(DATA_DIR / "areas.csv")
+    df_areas = cached_load_csv(DATA_DIR / AREAS_CSV_FILENAME) # areas.csv は DATA_DIR 直下に配置
     if df_areas is None:
         st.error("エリア一覧データが見つかりません。")
         return
@@ -390,16 +338,13 @@ def main():
 
     sidebar_navigation(area_names)
 
-    current_area = st.session_state.current_area
-    # ページの表示分岐
-    if current_area == "エリア一覧":
-        display_area_list(df_areas)
+    if selected_area == "エリア一覧":
+        display_area_list_page(df_areas)
+    elif selected_adventure:
+        display_adventure_detail_page(selected_area, selected_adventure)
     else:
-        if "adv" in query_params and query_params["adv"]:
-            selected_adv = query_params["adv"]
-            display_adventure_detail(current_area, selected_adv)
-        else:
-            display_area_page(current_area, df_areas)
+        display_area_page(selected_area, df_areas)
+
 
 if __name__ == "__main__":
     main()
