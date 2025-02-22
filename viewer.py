@@ -1,6 +1,6 @@
+import html
 import streamlit as st
 import pandas as pd
-from urllib.parse import urlencode
 from pathlib import Path
 from typing import Optional, List
 
@@ -109,15 +109,86 @@ def render_dataframe_as_html(df: pd.DataFrame) -> str:
     """DataFrameをHTMLテーブルに変換する。"""
     return df.style.hide(axis="index").set_properties(**{'vertical-align': 'top'}).to_html(escape=False, index=False)
 
+def render_dataframe_as_html_with_limit(df: pd.DataFrame, char_limit: int = 30) -> str:
+    """
+    DataFrameをHTMLテーブルに変換する関数。
+    ・各セルの文字列がchar_limit文字を超える場合は省略表示し、
+      ホバー時にその行の全文を表示するようにしました。（行全体がハイライトされ、全てのセルの全文が表示されます）
+    ・テキストを常に上揃えにしました。
+    ・"エリア名"列など、既にリンク（<a>タグなど）が含まれているセルは、そのまま出力されます。
+    """
+    def hover_formatter(x):
+        # 既にHTMLタグ（例：<a>）が含まれている場合は、hover処理を行わずそのまま返す
+        if isinstance(x, str) and "<a " in x:
+            return x
+        if isinstance(x, str):
+            safe_full_text = html.escape(x)
+            if len(x) > char_limit:
+                safe_truncated = html.escape(x[:char_limit]) + "..."
+            else:
+                safe_truncated = safe_full_text
+            return (
+                f'<div class="hover-cell">'
+                f'<span class="truncated">{safe_truncated}</span>'
+                f'<span class="fulltext">{safe_full_text}</span>'
+                f'</div>'
+            )
+        return x
+
+    # DataFrameをPandas StylerでHTMLテーブルに変換
+    html_with_style = df.style.hide(axis="index") \
+                            .set_properties(**{'vertical-align': 'top'}) \
+                            .format(hover_formatter) \
+                            .to_html(escape=False, index=False)
+    
+    # Pandasが自動生成した<style>ブロックを削除（最初の</style>までを除去）
+    if html_with_style.lstrip().startswith("<style"):
+        end_style = html_with_style.find("</style>")
+        if end_style != -1:
+            html_with_style = html_with_style[end_style + len("</style>"):]
+    
+    # 独自のCSSスタイル（hover時の表示切替、背景色変更、テキスト常に上揃え）
+    custom_css = """
+    <style>
+    td {
+        vertical-align: top; /* 全てのtd要素を上揃えに */
+    }
+    .hover-cell {
+        vertical-align: top; /* 念のため指定 */
+    }
+    .hover-cell .truncated {
+        white-space: pre-wrap;
+        word-break: break-all;
+        display: inline;
+        vertical-align: top; /* 念のため指定 */
+    }
+    .hover-cell .fulltext {
+        white-space: pre-wrap;
+        word-break: break-all;
+        display: none;
+        vertical-align: top; /* 念のため指定 */
+    }
+    tbody tr:hover .hover-cell .truncated {
+        display: none;
+    }
+    tbody tr:hover .hover-cell .fulltext {
+        display: inline;
+    }
+    tbody tr:hover {
+        background-color: #ffffcc; /* ホバー時の背景色（例：薄い黄色） */
+    }
+    </style>
+    """
+    return custom_css + html_with_style
+
 def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
     """DataFrameに行選択チェックボックスを表示し、選択された行を返す。"""
-    st.markdown("### データテーブル")
     header_cols = st.columns([0.5] + [1] * len(df.columns))
     with header_cols[0]:
-        st.write("選択")
+        st.write("**選択**")
     for col, header in zip(header_cols[1:], df.columns):
         with col:
-            st.write(header)
+            st.write(f"**{header}**")
 
     selected_indices = []
     for idx, row in df.iterrows():
