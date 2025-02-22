@@ -183,6 +183,9 @@ def render_dataframe_as_html_with_limit(df: pd.DataFrame, char_limit: int = 30) 
 
 def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
     """DataFrameに行選択チェックボックスを表示し、選択された行を返す。"""
+    # 削除後にキーがリセットされるよう、delete_counterを取得
+    delete_counter = st.session_state.get("delete_counter", 0)
+    
     header_cols = st.columns([0.5] + [1] * len(df.columns))
     with header_cols[0]:
         st.write("**選択**")
@@ -193,13 +196,41 @@ def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
     selected_indices = []
     for idx, row in df.iterrows():
         row_cols = st.columns([0.5] + [1] * len(row))
+        # チェックボックスのキーにdelete_counterを付与して一意性を確保
+        checkbox_key = f"checkbox_{idx}_{delete_counter}"
         with row_cols[0]:
-            if st.checkbox("選択", key=f"checkbox_{idx}", label_visibility="collapsed"):
+            if st.checkbox("選択", key=checkbox_key, label_visibility="collapsed"):
                 selected_indices.append(idx)
         for value, col in zip(row, row_cols[1:]):
             with col:
                 st.write(value)
-    return df.loc[selected_indices] if selected_indices else pd.DataFrame() # 選択行がない場合、空のDataFrameを返す
+    return df.loc[selected_indices] if selected_indices else pd.DataFrame()
+
+def display_check_results_section(area: str, total_results_count: int):
+    """チェック結果セクションを表示し、削除機能を提供する。"""
+    check_results_csv_path = get_check_results_csv_path(area)
+    df_check_results_original = cached_load_csv(check_results_csv_path)
+
+    if df_check_results_original is not None:
+        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{total_results_count})", expanded=True):
+            selected_df = display_dataframe_with_checkbox(df_check_results_original)
+            if selected_df.empty:
+                st.write("ℹ️ 削除するには行を選択してください。")
+            else:
+                if st.button("🔥 選択行を削除", key=f"delete_check_results_{area}"):
+                    adventures_to_delete = selected_df["冒険名"].tolist()
+                    delete_messages = delete_adventures(area, adventures_to_delete)
+                    for message in delete_messages:
+                        st.write(message)
+                    # delete_counterを更新してチェックボックスのキーを変更
+                    st.session_state.delete_counter = st.session_state.get("delete_counter", 0) + 1
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.write(selected_df["冒険名"])
+    else:
+        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
+
 
 def display_progress_bar(ratio: float, label: str):
     """プログレスバーとラベルを表示する。完了時には色を変更。"""
@@ -357,30 +388,6 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
         st.markdown(render_dataframe_as_html(df_adventures_original), unsafe_allow_html=True)
     else:
         st.write("エリアのデータが見つかりません。")
-
-
-def display_check_results_section(area: str, total_results_count: int):
-    """チェック結果セクションを表示し、削除機能を提供する。"""
-    check_results_csv_path = get_check_results_csv_path(area)
-    df_check_results_original = cached_load_csv(check_results_csv_path)
-
-    if df_check_results_original is not None:
-        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{total_results_count})", expanded=True):
-            selected_df = display_dataframe_with_checkbox(df_check_results_original)
-            if selected_df.empty:
-                st.write("ℹ️ 削除するには行を選択してください。")
-            else:
-                if st.button("🔥 選択行を削除", key=f"delete_check_results_{area}"):
-                    adventures_to_delete = selected_df["冒険名"].tolist()
-                    delete_messages = delete_adventures(area, adventures_to_delete)
-                    for message in delete_messages:
-                        st.write(message)
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.write(selected_df["冒険名"])
-    else:
-        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
 
 
 # --------------------------------------------------
