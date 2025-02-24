@@ -73,7 +73,8 @@ def check_logs_for_area(log_checker, area_name, area_csv_path):
                 summary_text = ",".join(row)
                 log_text = adventure_txt_path.read_text(encoding="utf-8")
                 check_result_json = log_checker.check_log(summary_text, log_text, adventure_name, check_results_csv_path)
-                if check_result_json:
+                if check_result_json and check_results_csv_path:
+                    log_checker.save_check_result_csv(check_result_json, adventure_name, check_results_csv_path)
                     print(f"✅ チェック: {adventure_name}")
                 if DEBUG_MODE:
                     break

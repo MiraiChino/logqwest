@@ -84,8 +84,6 @@ class LogChecker(BaseGenerator):
             log=log,
             temperature=0
         )
-        if check_result_json and csv_path:
-            self.save_check_result_csv(check_result_json, adv_name, csv_path)
         return check_result_json
     
     def sort_csv(self, file_path):
@@ -111,3 +109,25 @@ class LogChecker(BaseGenerator):
             writer = csv.writer(file)
             writer.writerow(headers)
             writer.writerows(rows)
+
+    def is_all_checked(self, check_result_json):
+        """
+        check_result_json を引数に、check_result_json[section_name][key]["評価"] がすべて✅かどうかを返す関数
+        """
+        for section_name, keys in self.expected_keys.items():
+            if section_name not in check_result_json:
+                print(f"セクション '{section_name}' が check_result_json に存在しません。")
+                return False  # セクションが存在しない場合は False
+            if not isinstance(check_result_json[section_name], dict):
+                print(f"セクション '{section_name}' は辞書型である必要があります。")
+                return False  # セクションが辞書型でない場合は False
+            for key in keys:
+                if key not in check_result_json[section_name]:
+                    print(f"セクション '{section_name}' にキー '{key}' が存在しません。")
+                    return False  # キーが存在しない場合は False
+                if "評価" not in check_result_json[section_name][key]:
+                    print(f"セクション '{section_name}' のキー '{key}' に '評価' フィールドが存在しません。")
+                    return False  # 評価フィールドが存在しない場合は False
+                if check_result_json[section_name][key]["評価"] != "✅":
+                    return False  # 評価が "✅" でない場合は False
+        return True  # すべての評価が "✅" の場合は True
