@@ -234,7 +234,6 @@ class AdventureGenerator(BaseGenerator):
             **prompt_kwargs
         )
         csv_contents = [adventure_name, result] + contents
-        self._add_to_csv(area_csv_path, csv_contents)
         return csv_contents
 
     def extract(self, response):
@@ -413,6 +412,7 @@ class LogGenerator(BaseGenerator):
                 else:
                     raise ValueError(f"NGワードが含まれています: {content_line}")
         if not filtered_lines:
+            print(response)
             raise ValueError("抽出されたコンテンツが空です。")
         if len(filtered_lines) < 20:
             raise ValueError("抽出されたコンテンツの行数が20行未満です。")

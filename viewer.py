@@ -4,8 +4,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, List
 
-from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_check_results_csv_path, load_csv, delete_adventures
-from config import LOGCHECK_HEADERS
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_check_log_csv_path, get_check_adv_csv_path, load_csv, delete_logs, delete_adventures
+from config import LOGCHECK_HEADERS, ADVCHECK_HEADERS
 
 # --------------------------------------------------
 # 設定
@@ -58,31 +58,46 @@ def is_area_complete(area: str) -> bool:
     """
     area_csv_path = get_area_csv_path(area)
     df_area = cached_load_csv(area_csv_path)
-    check_results_csv_path = get_check_results_csv_path(area)
-    df_check_results = cached_load_csv(check_results_csv_path)
+    check_log_csv_path = get_check_log_csv_path(area)
+    df_check_logs = cached_load_csv(check_log_csv_path)
+    check_adv_csv_path = get_check_adv_csv_path(area)
+    df_check_advs = cached_load_csv(check_adv_csv_path)
 
     if (df_area is None or "冒険名" not in df_area.columns or df_area.empty):
         return False
 
     total_adventures = len(df_area)
     completed_adventures_count = sum(1 for adv in df_area["冒険名"] if is_adventure_complete(area, adv))
-    checked_adventures_count = len(df_check_results) if df_check_results is not None else 0 # チェック結果CSVがない場合は0
+    checked_logs_count = len(df_check_logs) if df_check_logs is not None else 0 # チェック結果CSVがない場合は0
+    checked_advs_count = len(df_check_advs) if df_check_advs is not None else 0 # チェック結果CSVがない場合は0
 
-    return total_adventures == completed_adventures_count == checked_adventures_count
+    return total_adventures == completed_adventures_count == checked_logs_count == checked_advs_count
 
 def is_area_all_checked(area: str) -> bool:
     """
-    エリアの check_results_csv のチェック内容が全て✅で始まっているか確認する。
+    エリアの check_logs_csv, check_advs_csv のチェック内容が全て✅で始まっているか確認する。
     冒険の完了状態やチェック結果CSVの行数は見ない。
     """
-    check_results_csv_path = get_check_results_csv_path(area)
-    df_check_results = cached_load_csv(check_results_csv_path)
+    check_log_csv_path = get_check_log_csv_path(area)
+    df_check_logs = cached_load_csv(check_log_csv_path)
 
-    if df_check_results is None or df_check_results.empty:
+    if df_check_logs is None or df_check_logs.empty:
         return False
-
+    
     check_columns = LOGCHECK_HEADERS[2:-1] # 'ログ', '成否' 列をチェック
-    for _, row in df_check_results.iterrows():
+    for _, row in df_check_logs.iterrows():
+        for col in check_columns:
+            if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
+                return False
+
+    check_adv_csv_path = get_check_log_csv_path(area)
+    df_check_advs = cached_load_csv(check_adv_csv_path)
+
+    if df_check_advs is None or df_check_advs.empty:
+        return False
+    
+    check_columns = ADVCHECK_HEADERS[2:-1] # 'ログ', '成否' 列をチェック
+    for _, row in df_check_advs.iterrows():
         for col in check_columns:
             if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
                 return False
@@ -197,7 +212,7 @@ def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
     for idx, row in df.iterrows():
         row_cols = st.columns([0.5] + [1] * len(row))
         # チェックボックスのキーにdelete_counterを付与して一意性を確保
-        checkbox_key = f"checkbox_{idx}_{delete_counter}"
+        checkbox_key = f"checkbox_{row[1]}_{idx}_{delete_counter}"
         with row_cols[0]:
             if st.checkbox("選択", key=checkbox_key, label_visibility="collapsed"):
                 selected_indices.append(idx)
@@ -206,18 +221,42 @@ def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
                 st.write(value)
     return df.loc[selected_indices] if selected_indices else pd.DataFrame()
 
-def display_check_results_section(area: str, total_results_count: int):
-    """チェック結果セクションを表示し、削除機能を提供する。"""
-    check_results_csv_path = get_check_results_csv_path(area)
-    df_check_results_original = cached_load_csv(check_results_csv_path)
+def display_check_log_section(area: str, total_results_count: int):
+    """ログチェック結果セクションを表示し、削除機能を提供する。"""
+    check_results_csv_path = get_check_log_csv_path(area)
+    df_check_log_original = cached_load_csv(check_results_csv_path)
 
-    if df_check_results_original is not None:
-        with st.expander(f"チェック結果: ({len(df_check_results_original)}/{total_results_count})", expanded=True):
-            selected_df = display_dataframe_with_checkbox(df_check_results_original)
+    if df_check_log_original is not None:
+        with st.expander(f"チェック: 冒険ログ({len(df_check_log_original)}/{total_results_count})", expanded=True):
+            selected_df = display_dataframe_with_checkbox(df_check_log_original)
             if selected_df.empty:
                 st.write("ℹ️ 削除するには行を選択してください。")
             else:
                 if st.button("🔥 選択行を削除", key=f"delete_check_results_{area}"):
+                    adventures_to_delete = selected_df["冒険名"].tolist()
+                    delete_messages = delete_logs(area, adventures_to_delete)
+                    for message in delete_messages:
+                        st.write(message)
+                    # delete_counterを更新してチェックボックスのキーを変更
+                    st.session_state.delete_counter = st.session_state.get("delete_counter", 0) + 1
+                    st.cache_data.clear()
+                else:
+                    st.write(selected_df["冒険名"])
+    else:
+        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
+
+def display_check_adv_section(area: str, total_adventures_count: int):
+    """冒険データセクションを表示し、削除機能を提供する。"""
+    area_csv_path = get_check_adv_csv_path(area)
+    df_check_adv_original = cached_load_csv(area_csv_path)
+
+    if df_check_adv_original is not None:
+        with st.expander(f"チェック: 冒険サマリー({len(df_check_adv_original)}/{total_adventures_count})", expanded=True):
+            selected_df = display_dataframe_with_checkbox(df_check_adv_original)
+            if selected_df.empty:
+                st.write("ℹ️ 削除するには行を選択してください。")
+            else:
+                if st.button("🔥 選択行を削除", key=f"delete_adventures_{area}"):
                     adventures_to_delete = selected_df["冒険名"].tolist()
                     delete_messages = delete_adventures(area, adventures_to_delete)
                     for message in delete_messages:
@@ -225,12 +264,12 @@ def display_check_results_section(area: str, total_results_count: int):
                     # delete_counterを更新してチェックボックスのキーを変更
                     st.session_state.delete_counter = st.session_state.get("delete_counter", 0) + 1
                     st.cache_data.clear()
-                    st.rerun()
                 else:
-                    st.write(selected_df["冒険名"])
+                    st.write(selected_df["冒険名"]) # 選択された冒険名を表示 (オプション)
+    elif df_check_adv_original is not None:
+        st.write("冒険名列が見つかりません。")
     else:
-        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
-
+        st.write(f"エリアデータファイルが見つかりません: {area_csv_path}")
 
 def display_progress_bar(ratio: float, label: str):
     """プログレスバーとラベルを表示する。完了時には色を変更。"""
@@ -382,7 +421,8 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
                 else:
                     st.write("該当する冒険はありません。")
 
-        display_check_results_section(selected_area, len(df_adventures_original))
+        display_check_adv_section(selected_area, len(df_adventures_original))
+        display_check_log_section(selected_area, len(df_adventures_original))
 
     elif df_adventures_original is not None:
         st.markdown(render_dataframe_as_html(df_adventures_original), unsafe_allow_html=True)

@@ -5,9 +5,13 @@ import json
 
 from config import CHECK_RESULT_DIR, DATA_DIR
 
-def get_check_results_csv_path(area: str) -> Path:
-    """指定されたエリア名のCSVファイルパスを返す。"""
-    return CHECK_RESULT_DIR / f"{area}.csv"
+def get_check_log_csv_path(area: str) -> Path:
+    """指定されたエリア名のログチェックCSVファイルパスを返す。"""
+    return CHECK_RESULT_DIR / area / f"log_{area}.csv"
+
+def get_check_adv_csv_path(area: str) -> Path:
+    """指定されたエリア名の冒険チェックCSVファイルパスを返す。"""
+    return CHECK_RESULT_DIR / area / f"adv_{area}.csv"
 
 def get_data_path() -> Path:
     return DATA_DIR
@@ -23,31 +27,55 @@ def get_adventure_path(area: str, adv: str) -> Path:
 def delete_adventures(area: str, advs_to_delete: list):
     """
     指定された area に対して、
-    ・/check_results/{area}.csv の「冒険名」列に該当する行を削除
-    ・/data/{area}/{area}.csv の「冒険名」列に該当する行を削除
-    ・/data/{area}/{冒険名}.txt ファイルを削除
+    ・get_check_adv_csv_path の「冒険名」列に該当する行を削除
+    ・get_area_csv_path の「冒険名」列に該当する行を削除
     """
-    # 1. /check_results/{area}.csv の処理
-    check_results_path = Path(get_check_results_csv_path(area))
+    # get_check_adv_csv_path の処理
+    check_results_path = Path(get_check_adv_csv_path(area))
+    if check_results_path.exists():
+        df_check = pd.read_csv(check_results_path)
+        if "冒険名" in df_check.columns:
+            df_check = df_check[~df_check["冒険名"].isin(advs_to_delete)]
+            df_check.to_csv(check_results_path, index=False)
+            yield f"🔥 削除: {advs_to_delete} from {check_results_path}"
+        else:
+            yield f"❗ エラー: {check_results_path} に '冒険名' 列が見つかりません"
+    else:
+        yield f"❌ 見つかりません: {check_results_path}"
+
+    # get_area_csv_path の処理
+    area_csv_path = Path(get_area_csv_path(area))
+    if area_csv_path.exists():
+        df_area = pd.read_csv(area_csv_path)
+        if "冒険名" in df_area.columns:
+            df_area = df_area[~df_area["冒険名"].isin(advs_to_delete)]
+            df_area.to_csv(area_csv_path, index=False)
+            yield f"🔥 削除: {advs_to_delete} from {area_csv_path}"
+        else:
+            yield f"❗ エラー: {area_csv_path} に '冒険名' 列が見つかりません"
+    else:
+        yield f"❌ 見つかりません: {area_csv_path}"
+
+    yield from delete_logs(area, advs_to_delete)
+
+
+def delete_logs(area: str, advs_to_delete: list):
+    """
+    指定された area に対して、
+    ・get_check_log_csv_path の「冒険名」列に該当する行を削除
+    ・get_adventure_path ファイルを削除
+    """
+    # get_check_log_csv_path の処理
+    check_results_path = Path(get_check_log_csv_path(area))
     if check_results_path.exists():
         df_check = pd.read_csv(check_results_path)
         df_check = df_check[~df_check["冒険名"].isin(advs_to_delete)]
         df_check.to_csv(check_results_path, index=False)
-        yield f"🔄 更新: {check_results_path} removes {advs_to_delete}"
+        yield f"🔥 削除: {advs_to_delete} from {check_results_path}"
     else:
         yield f"❌ 見つかりません: {check_results_path}"
     
-    # 2. /data/{area}/{area}.csv の処理
-    # data_csv_path = Path(get_area_csv_path(area))
-    # if data_csv_path.exists():
-    #     df_data = pd.read_csv(data_csv_path)
-    #     df_data = df_data[~df_data["冒険名"].isin(advs_to_delete)]
-    #     df_data.to_csv(data_csv_path, index=False)
-    #     yield f"🔄 更新: {data_csv_path}"
-    # else:
-    #     yield f"❌ 見つかりません: {data_csv_path}"
-    
-    # 3. /data/{area}/{冒険名}.txt の処理
+    # get_adventure_path の処理
     for adv in advs_to_delete:
         txt_path = Path(get_adventure_path(area, adv))
         if txt_path.exists():
@@ -55,7 +83,7 @@ def delete_adventures(area: str, advs_to_delete: list):
             yield f"🔥 削除: {txt_path}"
         else:
             yield f"❌ 見つかりません: {txt_path}"
-
+    
 def get_outcome_emoji(outcome: str) -> str:
     """結果に応じて絵文字を返す"""
     outcome_emojis = {
