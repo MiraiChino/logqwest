@@ -90,7 +90,7 @@ def is_area_all_checked(area: str) -> bool:
             if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
                 return False
 
-    check_adv_csv_path = get_check_log_csv_path(area)
+    check_adv_csv_path = get_check_adv_csv_path(area)
     df_check_advs = cached_load_csv(check_adv_csv_path)
 
     if df_check_advs is None or df_check_advs.empty:
@@ -243,7 +243,7 @@ def display_check_log_section(area: str, total_results_count: int):
                 else:
                     st.write(selected_df["冒険名"])
     else:
-        st.write(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
+        st.warning(f"チェック結果ファイルが見つかりません: {check_results_csv_path}")
 
 def display_check_adv_section(area: str, total_adventures_count: int):
     """冒険データセクションを表示し、削除機能を提供する。"""
@@ -269,7 +269,7 @@ def display_check_adv_section(area: str, total_adventures_count: int):
     elif df_check_adv_original is not None:
         st.write("冒険名列が見つかりません。")
     else:
-        st.write(f"エリアデータファイルが見つかりません: {area_csv_path}")
+        st.warning(f"エリアデータファイルが見つかりません: {area_csv_path}")
 
 def display_progress_bar(ratio: float, label: str):
     """プログレスバーとラベルを表示する。完了時には色を変更。"""
@@ -364,9 +364,9 @@ def display_adventure_detail_page(selected_area: str, selected_adventure: str):
             st.markdown("**冒険情報**")
             st.markdown(render_dataframe_as_html(adventure_row), unsafe_allow_html=True)
         else:
-            st.write("該当の冒険情報は見つかりません。")
+            st.warning("該当の冒険情報は見つかりません。")
     else:
-        st.write("エリアのデータが存在しません。")
+        st.warning("エリアのデータが存在しません。")
 
     st.markdown("**冒険詳細 (テキストファイル)**")
     adventure_file_path = get_adventure_path(selected_area, selected_adventure)
@@ -380,7 +380,7 @@ def display_adventure_detail_page(selected_area: str, selected_adventure: str):
             st.error(f"冒険詳細ファイルの読み込みに失敗しました: {adventure_file_path} - {e}")
 
     else:
-        st.write("該当の冒険データが存在しません。")
+        st.warning("該当の冒険データが存在しません。")
 
     if st.button("戻る"):
         set_current_area(selected_area)
@@ -405,7 +405,7 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
             with st.expander("エリア情報", expanded=True):
                 st.markdown(render_dataframe_as_html(area_info), unsafe_allow_html=True)
         else:
-            st.write("エリア情報が存在しません。")
+            st.warning("エリア情報が存在しません。")
 
         adventure_results = ["失敗", "成功", "大成功"]
         for result in adventure_results:
@@ -419,7 +419,7 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
                     )
                     st.markdown(render_dataframe_as_html(df_clickable_adv), unsafe_allow_html=True)
                 else:
-                    st.write("該当する冒険はありません。")
+                    st.warning("該当する冒険はありません。")
 
         display_check_adv_section(selected_area, len(df_adventures_original))
         display_check_log_section(selected_area, len(df_adventures_original))
@@ -427,7 +427,7 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
     elif df_adventures_original is not None:
         st.markdown(render_dataframe_as_html(df_adventures_original), unsafe_allow_html=True)
     else:
-        st.write("エリアのデータが見つかりません。")
+        st.warning("エリアのデータが見つかりません。")
 
 
 # --------------------------------------------------
