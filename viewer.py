@@ -196,27 +196,31 @@ def render_dataframe_as_html_with_limit(df: pd.DataFrame, char_limit: int = 30) 
     """
     return custom_css + html_with_style
 
-def display_dataframe_with_checkbox(df: pd.DataFrame) -> pd.DataFrame:
+def display_dataframe_with_checkbox(df: pd.DataFrame, df_clickable: pd.DataFrame) -> pd.DataFrame:
     """DataFrameに行選択チェックボックスを表示し、選択された行を返す。"""
     # 削除後にキーがリセットされるよう、delete_counterを取得
     delete_counter = st.session_state.get("delete_counter", 0)
     
-    header_cols = st.columns([0.5] + [1] * len(df.columns))
+    header_cols = st.columns([0.5] + [1] * len(df_clickable.columns))
     with header_cols[0]:
         st.write("**選択**")
-    for col, header in zip(header_cols[1:], df.columns):
+    for col, header in zip(header_cols[1:], df_clickable.columns):
         with col:
             st.write(f"**{header}**")
 
     selected_indices = []
-    for idx, row in df.iterrows():
+    for idx, row in df_clickable.iterrows():
         row_cols = st.columns([0.5] + [1] * len(row))
         # チェックボックスのキーにdelete_counterを付与して一意性を確保
         checkbox_key = f"checkbox_{row[1]}_{idx}_{delete_counter}"
         with row_cols[0]:
             if st.checkbox("選択", key=checkbox_key, label_visibility="collapsed"):
                 selected_indices.append(idx)
-        for value, col in zip(row, row_cols[1:]):
+        
+        with row_cols[1]:
+            st.html(row[0])
+
+        for value, col in zip(row[1:], row_cols[2:]):
             with col:
                 st.write(value)
     return df.loc[selected_indices] if selected_indices else pd.DataFrame()
@@ -227,8 +231,12 @@ def display_check_log_section(area: str, total_results_count: int):
     df_check_log_original = cached_load_csv(check_results_csv_path)
 
     if df_check_log_original is not None:
+        df_check_log_clickable = df_check_log_original.copy()
         with st.expander(f"チェック: 冒険ログ({len(df_check_log_original)}/{total_results_count})", expanded=True):
-            selected_df = display_dataframe_with_checkbox(df_check_log_original)
+            df_check_log_clickable["冒険名"] = df_check_log_clickable["冒険名"].apply(
+                lambda adv: f'<a href="?area={area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(area, adv) else adv}</a>'
+            )
+            selected_df = display_dataframe_with_checkbox(df_check_log_original, df_check_log_clickable)
             if selected_df.empty:
                 st.write("ℹ️ 削除するには行を選択してください。")
             else:
@@ -251,8 +259,12 @@ def display_check_adv_section(area: str, total_adventures_count: int):
     df_check_adv_original = cached_load_csv(area_csv_path)
 
     if df_check_adv_original is not None:
+        df_check_adv_clickable = df_check_adv_original.copy()
         with st.expander(f"チェック: 冒険サマリー({len(df_check_adv_original)}/{total_adventures_count})", expanded=True):
-            selected_df = display_dataframe_with_checkbox(df_check_adv_original)
+            df_check_adv_clickable["冒険名"] = df_check_adv_clickable["冒険名"].apply(
+                lambda adv: f'<a href="?area={area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(area, adv) else adv}</a>'
+            )
+            selected_df = display_dataframe_with_checkbox(df_check_adv_original, df_check_adv_clickable)
             if selected_df.empty:
                 st.write("ℹ️ 削除するには行を選択してください。")
             else:
@@ -297,7 +309,7 @@ def update_query_params(area: str = "", adventure: str = ""):
         params["area"] = area
     if adventure:
         params["adv"] = adventure
-    st.query_params.update(params)
+    st.query_params.from_dict(params)
 
 def set_current_area(area: str):
     """セッションステートとクエリパラメータを更新し、現在のエリアを設定する。"""
@@ -435,7 +447,7 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
 # --------------------------------------------------
 def main():
     st.set_page_config(
-        page_title="Data Viewer",
+        page_title="冒険データ",
         page_icon="📖",
         layout="wide",
     )
