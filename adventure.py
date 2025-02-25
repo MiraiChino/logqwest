@@ -129,15 +129,16 @@ def run_adventure_streaming():
 
     # 冒険シナリオのシミュレーション
     total_time = timedelta()
+    start_time = datetime.now().isoformat(timespec='seconds')
     current_time = datetime.now() if DEBUG_MODE else None
     with adventure_file.open("r", encoding="utf-8") as f:
         for line in f:
             time_increment = timedelta(minutes=2.5)
             if DEBUG_MODE:
                 current_time += time_increment
-                total_time += time_increment
             else:
                 current_time = datetime.now()
+            total_time += time_increment
 
             time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
             line_text = line.strip().format_map(defaultdict(str, name=adventurer_name))
@@ -151,7 +152,7 @@ def run_adventure_streaming():
 
     # 履歴の追加
     adventure_entry = {
-        "timestamp": datetime.now().isoformat(timespec='seconds'),
+        "timestamp": start_time,
         "area": selected_area,
         "outcome": selected_outcome,
         "prize": prize,
