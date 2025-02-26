@@ -9,6 +9,7 @@ AREAS_CSV_FILE = DATA_DIR / "areas.csv"
 NEW_AREA_TEMPLATE_FILE = PROMPT_DIR / "new_area.txt"
 NEW_ADVENTURE_TEMPLATE_FILE = PROMPT_DIR / "new_adventure.txt"
 NEW_LOG_TEMPLATE_FILE = PROMPT_DIR / "new_log.txt"
+NEW_LOCATION_TEMPLATE_FILE = PROMPT_DIR / "new_location.txt"
 CHECK_LOG_TEMPLATE_FILE = PROMPT_DIR / "check_log.txt"
 CHECK_ADVENTURE_TEMPLATE_FILE = PROMPT_DIR / "check_adventure.txt"
 

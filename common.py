@@ -24,6 +24,10 @@ def get_adventure_path(area: str, adv: str) -> Path:
     """指定されたエリア内の冒険テキストファイルのパスを返す。"""
     return DATA_DIR / area / f"{adv}.txt"
 
+def get_location_path(area: str, adv: str) -> Path:
+    """指定されたエリア内の冒険テキストの位置ファイルのパスを返す。"""
+    return DATA_DIR / area / f"loc_{adv}.txt"
+
 def delete_adventures(area: str, advs_to_delete: list):
     """
     指定された area に対して、

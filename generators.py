@@ -10,6 +10,7 @@ from config import (
     NEW_AREA_TEMPLATE_FILE,
     NEW_ADVENTURE_TEMPLATE_FILE,
     NEW_LOG_TEMPLATE_FILE,
+    NEW_LOCATION_TEMPLATE_FILE,
     RESULT_TEMPLATE,
     NG_WORDS,
     CSV_HEADERS_AREA,
@@ -417,3 +418,98 @@ class LogGenerator(BaseGenerator):
         if len(filtered_lines) < 20:
             raise ValueError("抽出されたコンテンツの行数が20行未満です。")
         return '\n'.join(filtered_lines) + '\n'
+
+
+class LocationGenerator(BaseGenerator):
+    def __init__(self, chat_client, all_areas_csv_path, template_file=NEW_LOCATION_TEMPLATE_FILE):
+        super().__init__(chat_client, template_file)
+        self.all_areas_csv_path = all_areas_csv_path
+        self.areas = self._load_areas()
+
+    def _load_areas(self):
+        areas = {}
+        areas_csv_path = Path(self.all_areas_csv_path)
+        if areas_csv_path.exists():
+            with areas_csv_path.open("r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                next(reader, None)
+                for row in reader:
+                    if len(row) == len(CSV_HEADERS_AREA):
+                        area_data = dict(zip(CSV_HEADERS_AREA, row))
+                        areas[row[0]] = area_data
+        return areas
+    
+    def _location_candidates(self):
+        area_info = self.areas.get(self.area_name)
+        area = f"{area_info[CSV_HEADERS_AREA[0]]}:{area_info[CSV_HEADERS_AREA[1]]}"
+        waypoints = area_info[CSV_HEADERS_AREA[9]].split(';')
+        cities = area_info[CSV_HEADERS_AREA[10]].split(';')
+        routes = area_info[CSV_HEADERS_AREA[11]].split(';')
+        restpoints = area_info[CSV_HEADERS_AREA[12]].split(';')
+        candidates = [area] + waypoints + cities + routes + restpoints
+        candidate_names = [c.split(':')[0] for c in candidates]
+        return candidate_names
+
+    @retry_on_failure()
+    def generate_new_location(self, adventure_name, area_name):
+        """新しい位置情報を生成する。"""
+        area_info = self.areas.get(area_name)
+        self.area_name = area_name
+        if not area_info:
+            raise ValueError(f"エリア '{area_name}' が見つかりません。")
+
+        area_dir = DATA_DIR / area_name
+        area_dir.mkdir(parents=True, exist_ok=True)
+
+        adventure_txt_path = get_adventure_path(area_name, adventure_name)
+        log_text = adventure_txt_path.read_text(encoding="utf-8")
+        lines = log_text.splitlines()
+
+        # 各行の先頭に行番号を付ける
+        numbered_lines = [f"{i+1}: {line}" for i, line in enumerate(lines)]
+        numbered_log_text = '\n'.join(numbered_lines)
+
+        def to_bullets(input_csv):
+            input_list = input_csv.split(';')
+            output_lines = [f"  - {s}" for s in input_list]
+            output_string = "\n".join(output_lines)
+            return output_string
+        prompt_kwargs = dict(
+            area=f"  - {area_info[CSV_HEADERS_AREA[0]]}:{area_info[CSV_HEADERS_AREA[1]]}",
+            waypoint=to_bullets(area_info[CSV_HEADERS_AREA[9]]),
+            city=to_bullets(area_info[CSV_HEADERS_AREA[10]]),
+            route=to_bullets(area_info[CSV_HEADERS_AREA[11]]),
+            restpoint=to_bullets(area_info[CSV_HEADERS_AREA[12]]),
+            log=numbered_log_text,
+        )
+        contents = self.generate(
+            response_format=TYPE_JSON,
+            temperature=0,
+            **prompt_kwargs
+        )
+        if len(contents.splitlines()) != len(numbered_lines):
+            raise ValueError(f"テキストの長さが異なります: {len(contents.split('\n'))} != {len(log_text.split('\n'))}")
+        return contents
+
+    def extract(self, response):
+        try:
+            json_str = self._extract_json_string(response)
+            data = json5.loads(json_str)
+            self._validate_data(data)
+            contents = '\n'.join(data.values())
+            return contents
+        except json.JSONDecodeError as e:
+            print("JSONデコードエラー:", response)
+            raise ValueError(f"無効なJSON形式: {str(e)}") from e
+
+    def _extract_json_string(self, response):
+        pattern = r"```json\n(.*?)```"
+        match = re.search(pattern, response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        else:
+            return response
+        
+    def _validate_data(self, data):
+        pass
+       

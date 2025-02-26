@@ -6,8 +6,8 @@ from typing import List, Dict, Any
 from llm import GeminiChat, GroqChat
 from config import AREAS_CSV_FILE, CHAPTER_SETTINGS
 from checkers import LogChecker, AdventureChecker
-from generators import AreaGenerator, AdventureGenerator, LogGenerator
-from common import get_area_csv_path, get_adventure_path, get_data_path, get_check_log_csv_path, get_check_adv_csv_path
+from generators import AreaGenerator, AdventureGenerator, LogGenerator, LocationGenerator
+from common import get_area_csv_path, get_adventure_path, get_data_path, get_check_log_csv_path, get_check_adv_csv_path, get_location_path
 
 
 # 定数
@@ -52,6 +52,7 @@ def parse_arguments() -> argparse.Namespace:
 
     # ログ生成サブコマンド
     subparsers.add_parser("logs", help="ログを生成")
+    subparsers.add_parser("locations", help="ログの現在地を生成")
     return parser.parse_args()
 
 
@@ -192,8 +193,8 @@ def process_logs_content(log_generator: LogGenerator, log_checker: LogChecker, d
         area_name = area_dir.name
         area_csv_path = get_area_csv_path(area_name)
         if area_csv_path.exists():
-            generate_logs_for_area(log_generator, log_checker, area_name, area_csv_path, debug_mode)
-        if debug_mode:
+            debug_breaked = generate_logs_for_area(log_generator, log_checker, area_name, area_csv_path, debug_mode)
+        if debug_breaked:
             break  # デバッグモード時は最初の1エリアのみ実行
 
 
@@ -220,8 +221,8 @@ def generate_logs_for_area(
                 # print(f"⏩ ログ: {adventure_txt_path} 既に存在するためスキップしました。")
                 continue  # ログファイルが既に存在する場合はスキップ
 
-            generate_log_with_retry(log_generator, log_checker, area_name, area_csv_path, check_results_csv_path, adventure_name, row, adventure_txt_path, debug_mode)
-            if debug_mode:
+            debug_breaked = generate_log_with_retry(log_generator, log_checker, area_name, area_csv_path, check_results_csv_path, adventure_name, row, adventure_txt_path, debug_mode)
+            if debug_breaked:
                 break
 
 
@@ -282,10 +283,52 @@ def generate_log_with_retry(log_generator: LogGenerator, log_checker: LogChecker
                     Path(current_adventure_txt_path).unlink(missing_ok=True)  # エラー発生時はログファイルを削除
                     print(f"🔥 ログファイルを削除しました: {current_adventure_txt_path}")
         if is_all_checked or debug_mode: # チェックOKまたはデバッグモードの場合はループを抜ける
-            break
+            return True
 
     if not is_all_checked:  # リトライ回数上限を超えても is_all_checked が False の場合
         print(f"🔥 リトライ回数上限に達しました。ログ生成に失敗しました: {temp_adventure_txt_path}")
+
+def process_locations_content(location_generator: LocationGenerator, debug_mode: bool = False) -> None:
+    """現在地コンテンツを処理する。"""
+    areas_dir = get_data_path()
+    area_dirs = [d for d in areas_dir.iterdir() if d.is_dir()]
+    for area_dir in area_dirs:
+        area_name = area_dir.name
+        area_csv_path = get_area_csv_path(area_name)
+        if area_csv_path.exists():
+            debug_breaked = generate_locations_for_area(location_generator, area_name, area_csv_path, debug_mode)
+        if debug_breaked:
+            break  # デバッグモード時は最初の1エリアのみ実行
+
+def generate_locations_for_area(
+    location_generator: LocationGenerator, area_name: str, area_csv_path: str, debug_mode: bool = False
+) -> None:
+    """特定のエリアのログを生成する。"""
+    path = Path(area_csv_path)
+    if not path.exists():
+        return
+
+    with path.open("r", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        next(reader, None)  # ヘッダー行をスキップ
+
+        for row in reader:
+            if not row:
+                continue
+            adventure_name, result, *chapters = row
+            location_txt_path = get_location_path(area_name, adventure_name)
+
+            if location_txt_path.exists():
+                continue  # 位置ファイルが既に存在する場合はスキップ
+
+            txt_contents = location_generator.generate_new_location(
+                area_name=area_name,
+                adventure_name=adventure_name,
+            )
+            location_generator._add_to_txt(location_txt_path, txt_contents)
+            print(f"✅ 位置: {location_txt_path}")
+            if debug_mode:
+                return True
 
 
 def main() -> None:
@@ -295,7 +338,7 @@ def main() -> None:
 
     # デバッグモードをジェネレータモジュールに設定 (必要に応じて)
     import generators
-    generators.DEBUG_MODE = debug_mode  #  <- この行は削除を検討してください。
+    generators.DEBUG_MODE = debug_mode
 
     chat_client = initialize_chat_client(args.client, args.model)
 
@@ -310,7 +353,10 @@ def main() -> None:
         log_generator = LogGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
         log_checker = LogChecker(chat_client)
         process_logs_content(log_generator, log_checker, debug_mode)
-
+    elif args.type == "locations":
+        location_generator = LocationGenerator(chat_client, all_areas_csv_path=AREAS_CSV_FILE)
+        # location_checker = LocationChecker(chat_client)
+        process_locations_content(location_generator, debug_mode)
 
 if __name__ == "__main__":
     main()
