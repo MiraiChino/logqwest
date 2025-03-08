@@ -181,10 +181,10 @@ class AreaGenerator(BaseGenerator):
 
         treasure_name = data["財宝"].split(":")[0]
         treasure_list = [area_data["財宝"].split(":")[0] for area_data in self.areas.values()]
-        if treasure_name in treasure_list or any(treasure_name in treasure for treasure in treasure_list):
+        if treasure_name in treasure_list or any(treasure in treasure_name for treasure in treasure_list):
             raise ValueError(f"既存の財宝と重複しています: {treasure_name}")
         area_name = data["エリア名"]
-        if area_name in self.areas or any(area_name in area for area in self.areas):
+        if area_name in self.areas or any(area in area_name for area in self.areas):
             raise ValueError(f"既存のエリア名と重複しています: {area_name}")
 
 
