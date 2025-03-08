@@ -45,18 +45,18 @@ class BaseGenerator:
         prompt = self.template.format(**kwargs)
 
         global DEBUG_MODE
-        if DEBUG_MODE:
-            print("=== DEBUG: Prompt ===")
-            print(prompt)
-            print("=====================")
+        # if DEBUG_MODE:
+        #     print("=== DEBUG: Prompt ===")
+        #     print(prompt)
+        #     print("=====================")
         time.sleep(DEFAULT_WAIT_TIME)
         response = self.chat_client.get_response(
             prompt, temperature, max_tokens, response_format=response_format
         )
-        if DEBUG_MODE:
-            print("=== DEBUG: Response ===")
-            print(response)
-            print("=======================")
+        # if DEBUG_MODE:
+        #     print("=== DEBUG: Response ===")
+        #     print(response)
+        #     print("=======================")
         contents = self.extract(response)
         if DEBUG_MODE:
             print("=== DEBUG: Contents ===")
@@ -180,10 +180,11 @@ class AreaGenerator(BaseGenerator):
                 raise ValueError(f"NGワードが含まれています: {value}")
 
         treasure_name = data["財宝"].split(":")[0]
-        if treasure_name in [area_data["財宝"].split(":")[0] for area_data in self.areas.values()]:
+        treasure_list = [area_data["財宝"].split(":")[0] for area_data in self.areas.values()]
+        if treasure_name in treasure_list or any(treasure_name in treasure for treasure in treasure_list):
             raise ValueError(f"既存の財宝と重複しています: {treasure_name}")
         area_name = data["エリア名"]
-        if area_name in self.areas:
+        if area_name in self.areas or any(area_name in area for area in self.areas):
             raise ValueError(f"既存のエリア名と重複しています: {area_name}")
 
 
@@ -450,6 +451,21 @@ class LocationGenerator(BaseGenerator):
         candidate_names = [c.split(':')[0] for c in candidates]
         return candidate_names
 
+    def candidate_details(self):
+        def to_bullets(input_csv):
+            input_list = input_csv.split(';')
+            output_lines = [f"  - {s}" for s in input_list]
+            output_string = "\n".join(output_lines)
+            return output_string
+        area_info = self.areas.get(self.area_name)
+        return dict(
+            area=f"  - {area_info[CSV_HEADERS_AREA[0]]}:{area_info[CSV_HEADERS_AREA[1]]}",
+            waypoint=to_bullets(area_info[CSV_HEADERS_AREA[9]]),
+            city=to_bullets(area_info[CSV_HEADERS_AREA[10]]),
+            route=to_bullets(area_info[CSV_HEADERS_AREA[11]]),
+            restpoint=to_bullets(area_info[CSV_HEADERS_AREA[12]])
+        )
+
     @retry_on_failure()
     def generate_new_location(self, adventure_name, area_name):
         """新しい位置情報を生成する。"""
@@ -469,26 +485,21 @@ class LocationGenerator(BaseGenerator):
         numbered_lines = [f"{i+1}: {line}" for i, line in enumerate(lines)]
         numbered_log_text = '\n'.join(numbered_lines)
 
-        def to_bullets(input_csv):
-            input_list = input_csv.split(';')
-            output_lines = [f"  - {s}" for s in input_list]
-            output_string = "\n".join(output_lines)
-            return output_string
+        candidates = self.candidate_details()
         prompt_kwargs = dict(
-            area=f"  - {area_info[CSV_HEADERS_AREA[0]]}:{area_info[CSV_HEADERS_AREA[1]]}",
-            waypoint=to_bullets(area_info[CSV_HEADERS_AREA[9]]),
-            city=to_bullets(area_info[CSV_HEADERS_AREA[10]]),
-            route=to_bullets(area_info[CSV_HEADERS_AREA[11]]),
-            restpoint=to_bullets(area_info[CSV_HEADERS_AREA[12]]),
+            area=candidates["area"],
+            waypoint=candidates["waypoint"],
+            city=candidates["city"],
+            route=candidates["route"],
+            restpoint=candidates["restpoint"],
             log=numbered_log_text,
         )
         contents = self.generate(
             response_format=TYPE_JSON,
-            temperature=0,
             **prompt_kwargs
         )
         if len(contents.splitlines()) != len(numbered_lines):
-            raise ValueError(f"テキストの長さが異なります: {len(contents.split('\n'))} != {len(log_text.split('\n'))}")
+            raise ValueError(f"テキストの長さが異なります: {len(contents.splitlines())} != {len(numbered_lines)}")
         return contents
 
     def extract(self, response):

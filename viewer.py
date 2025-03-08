@@ -4,8 +4,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, List
 
-from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_check_log_csv_path, get_check_adv_csv_path, load_csv, delete_logs, delete_adventures
-from config import LOGCHECK_HEADERS, ADVCHECK_HEADERS
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_location_path, get_check_log_csv_path, get_check_adv_csv_path, get_check_loc_csv_path, load_csv, delete_logs, delete_adventures, delete_locations
+from config import LOGCHECK_HEADERS, ADVCHECK_HEADERS, LOCATIONCHECK_HEADERS
 
 # --------------------------------------------------
 # 設定
@@ -62,6 +62,8 @@ def is_area_complete(area: str) -> bool:
     df_check_logs = cached_load_csv(check_log_csv_path)
     check_adv_csv_path = get_check_adv_csv_path(area)
     df_check_advs = cached_load_csv(check_adv_csv_path)
+    check_loc_csv_path = get_check_loc_csv_path(area)
+    df_check_locs = cached_load_csv(check_loc_csv_path)
 
     if (df_area is None or "冒険名" not in df_area.columns or df_area.empty):
         return False
@@ -70,8 +72,9 @@ def is_area_complete(area: str) -> bool:
     completed_adventures_count = sum(1 for adv in df_area["冒険名"] if is_adventure_complete(area, adv))
     checked_logs_count = len(df_check_logs) if df_check_logs is not None else 0 # チェック結果CSVがない場合は0
     checked_advs_count = len(df_check_advs) if df_check_advs is not None else 0 # チェック結果CSVがない場合は0
+    checked_locs_count = len(df_check_locs) if df_check_locs is not None else 0 # チェック結果CSVがない場合は0
 
-    return total_adventures == completed_adventures_count == checked_logs_count == checked_advs_count
+    return total_adventures == completed_adventures_count == checked_logs_count == checked_advs_count == checked_locs_count
 
 def is_area_all_checked(area: str) -> bool:
     """
@@ -84,7 +87,7 @@ def is_area_all_checked(area: str) -> bool:
     if df_check_logs is None or df_check_logs.empty:
         return False
     
-    check_columns = LOGCHECK_HEADERS[2:-1] # 'ログ', '成否' 列をチェック
+    check_columns = LOGCHECK_HEADERS[1:-1] # '冒険名', '総合評価' 以外の列をチェック
     for _, row in df_check_logs.iterrows():
         for col in check_columns:
             if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
@@ -96,12 +99,23 @@ def is_area_all_checked(area: str) -> bool:
     if df_check_advs is None or df_check_advs.empty:
         return False
     
-    check_columns = ADVCHECK_HEADERS[2:-1] # 'ログ', '成否' 列をチェック
+    check_columns = ADVCHECK_HEADERS[1:-1] # '冒険名', '総合評価' 以外の列をチェック
     for _, row in df_check_advs.iterrows():
         for col in check_columns:
             if not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK):
                 return False
 
+    check_loc_csv_path = get_check_loc_csv_path(area)
+    df_check_locs = cached_load_csv(check_loc_csv_path)
+
+    if df_check_locs is None or df_check_locs.empty:
+        return False
+
+    check_columns = LOCATIONCHECK_HEADERS[1:-1] # '冒険名', '総合評価' 以外の列をチェック
+    for _, row in df_check_locs.iterrows():
+        for col in check_columns:
+            if col not in row or not isinstance(row[col], str) or not row[col].startswith(CHECK_MARK): # 列が存在しない場合も考慮
+                return False
     return True # 全ての項目が✅で始まっていればTrueを返す
 
 # --------------------------------------------------
@@ -232,7 +246,7 @@ def display_check_log_section(area: str, total_results_count: int):
 
     if df_check_log_original is not None:
         df_check_log_clickable = df_check_log_original.copy()
-        with st.expander(f"チェック: 冒険ログ({len(df_check_log_original)}/{total_results_count})", expanded=True):
+        with st.expander(f"チェック: 冒険ログ({len(df_check_log_original)}/{total_results_count})", expanded=False):
             df_check_log_clickable["冒険名"] = df_check_log_clickable["冒険名"].apply(
                 lambda adv: f'<a href="?area={area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(area, adv) else adv}</a>'
             )
@@ -260,7 +274,7 @@ def display_check_adv_section(area: str, total_adventures_count: int):
 
     if df_check_adv_original is not None:
         df_check_adv_clickable = df_check_adv_original.copy()
-        with st.expander(f"チェック: 冒険サマリー({len(df_check_adv_original)}/{total_adventures_count})", expanded=True):
+        with st.expander(f"チェック: 冒険サマリー({len(df_check_adv_original)}/{total_adventures_count})", expanded=False):
             df_check_adv_clickable["冒険名"] = df_check_adv_clickable["冒険名"].apply(
                 lambda adv: f'<a href="?area={area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(area, adv) else adv}</a>'
             )
@@ -282,6 +296,36 @@ def display_check_adv_section(area: str, total_adventures_count: int):
         st.write("冒険名列が見つかりません。")
     else:
         st.warning(f"エリアデータファイルが見つかりません: {area_csv_path}")
+
+def display_check_loc_section(area: str, total_adventures_count: int):
+    """位置情報チェック結果セクションを表示し、削除機能を提供する。"""
+    check_loc_csv_path = get_check_loc_csv_path(area)
+    df_check_loc_original = cached_load_csv(check_loc_csv_path)
+
+    if df_check_loc_original is not None:
+        df_check_loc_clickable = df_check_loc_original.copy()
+        with st.expander(f"チェック: 位置情報({len(df_check_loc_original)}/{total_adventures_count})", expanded=False):
+            df_check_loc_clickable["冒険名"] = df_check_loc_clickable["冒険名"].apply(
+                lambda adv: f'<a href="?area={area}&adv={adv}" target="_self">{CHECK_MARK + adv if is_adventure_complete(area, adv) else adv}</a>'
+            )
+            selected_df = display_dataframe_with_checkbox(df_check_loc_original, df_check_loc_clickable)
+            if selected_df.empty:
+                st.write("ℹ️ 削除するには行を選択してください。")
+            else:
+                if st.button("🔥 選択行を削除", key=f"delete_check_loc_results_{area}"):
+                    adventures_to_delete = selected_df["冒険名"].tolist()
+                    delete_messages = delete_locations(area, adventures_to_delete) # 削除関数は共通でOK
+                    for message in delete_messages:
+                        st.write(message)
+                    # delete_counterを更新してチェックボックスのキーを変更
+                    st.session_state.delete_counter = st.session_state.get("delete_counter", 0) + 1
+                    st.cache_data.clear()
+                else:
+                    st.write(selected_df["冒険名"]) # 選択された冒険名を表示 (オプション)
+    elif df_check_loc_original is not None:
+        st.write("冒険名列が見つかりません。")
+    else:
+        st.warning(f"位置情報チェック結果ファイルが見つかりません: {check_loc_csv_path}")
 
 def display_progress_bar(ratio: float, label: str):
     """プログレスバーとラベルを表示する。完了時には色を変更。"""
@@ -382,7 +426,18 @@ def display_adventure_detail_page(selected_area: str, selected_adventure: str):
 
     st.markdown("**冒険詳細 (テキストファイル)**")
     adventure_file_path = get_adventure_path(selected_area, selected_adventure)
-    if adventure_file_path.exists():
+    loc_file_path = get_location_path(selected_area, selected_adventure)
+    if adventure_file_path.exists() and loc_file_path.exists():
+        try:
+            with open(adventure_file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            with open(loc_file_path, "r", encoding="utf-8") as f:
+                location = f.read()
+            numbered_content = "\n".join(f"{i+1}. [{location}] {line}" for i, (line, location) in enumerate(zip(content.splitlines(), location.splitlines())))
+            st.text(numbered_content)
+        except Exception as e:
+            st.error(f"冒険詳細ファイルの読み込みに失敗しました: {adventure_file_path} - {e}")
+    elif adventure_file_path.exists():
         try:
             with open(adventure_file_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -390,7 +445,6 @@ def display_adventure_detail_page(selected_area: str, selected_adventure: str):
             st.text(numbered_content)
         except Exception as e:
             st.error(f"冒険詳細ファイルの読み込みに失敗しました: {adventure_file_path} - {e}")
-
     else:
         st.warning("該当の冒険データが存在しません。")
 
@@ -435,6 +489,7 @@ def display_area_page(selected_area: str, df_areas: pd.DataFrame):
 
         display_check_adv_section(selected_area, len(df_adventures_original))
         display_check_log_section(selected_area, len(df_adventures_original))
+        display_check_loc_section(selected_area, len(df_adventures_original))
 
     elif df_adventures_original is not None:
         st.markdown(render_dataframe_as_html(df_adventures_original), unsafe_allow_html=True)

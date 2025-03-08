@@ -3,7 +3,7 @@ import json
 import re
 
 import json5
-from config import CHECK_LOG_TEMPLATE_FILE, LOGCHECK_KEYS, LOGCHECK_HEADERS, CHECK_ADVENTURE_TEMPLATE_FILE, ADVCHECK_KEYS, ADVCHECK_HEADERS
+from config import CHECK_LOG_TEMPLATE_FILE, LOGCHECK_KEYS, LOGCHECK_HEADERS, CHECK_ADVENTURE_TEMPLATE_FILE, ADVCHECK_KEYS, ADVCHECK_HEADERS, CHECK_LOCATION_TEMPLATE_FILE, LOCATIONCHECK_KEYS, LOCATIONCHECK_HEADERS
 from generators import BaseGenerator
 from llm import TYPE_TEXT, retry_on_failure
 
@@ -159,3 +159,73 @@ class AdventureChecker(BaseChecker):
     @retry_on_failure()
     def check_adventure(self, area, summary):
         return self.check(area, summary)
+    
+
+class LocationChecker(BaseChecker):
+    def __init__(self, chat_client, template_file=CHECK_LOCATION_TEMPLATE_FILE):
+        super().__init__(chat_client, template_file)
+        self.expected_keys = LOCATIONCHECK_KEYS
+        self.csv_headers = LOCATIONCHECK_HEADERS
+
+    def get_generate_kwargs(self, log, area, waypoint, city, route, restpoint):
+        return {
+            "log": log,
+            "area": area,
+            "waypoint": waypoint,
+            "city": city,
+            "route": route,
+            "restpoint": restpoint,
+        }
+
+    @retry_on_failure()
+    def check(self, log, area, waypoint, city, route, restpoint):
+        generate_kwargs = self.get_generate_kwargs(log, area, waypoint, city, route, restpoint)
+        extracted_json = self.generate(
+            response_format=TYPE_TEXT,
+            temperature=0,
+            **generate_kwargs
+        )
+        return extracted_json
+
+    @retry_on_failure()
+    def check_location(self, log, area, waypoint, city, route, restpoint):
+        return self.check(log, area, waypoint, city, route, restpoint)
+    
+    def validate_json_structure(self, json_data):
+        for key in self.expected_keys:
+            if key not in json_data:
+                print(f"JSONレスポンスに必須キー '{key}' がありません。")
+                return False
+            if not json_data[key]: # 値が空かどうかチェック
+                print(f"キー '{key}' の値が空です。")
+                return False
+        if "総合評価" not in json_data:
+            print("JSONレスポンスに必須キー '総合評価' がありません。")
+            return False
+        if not json_data["総合評価"]:
+            print("JSONレスポンスの必須キー '総合評価' の値が空です。")
+            return False
+        return True
+    
+    def is_all_checked(self, check_result_json):
+        """
+        check_result_json を引数に、check_result_json[key]["評価"] がすべて✅かどうかを返す関数
+        """
+        for key in self.expected_keys:
+            if key not in check_result_json:
+                print(f"キー '{key}' が存在しません。")
+                return False
+            if "評価" not in check_result_json[key]:
+                print(f"キー '{key}' に '評価' フィールドが存在しません。")
+                return False
+            if check_result_json[key]["評価"] != "✅":
+                return False
+        return True
+    
+    def _json_to_csv_row(self, adv_name, json_data):
+        csv_row = [adv_name]
+        for key in self.expected_keys:
+            value = json_data[key]["評価"] + json_data[key]["理由"]
+            csv_row.append(value)
+        csv_row.append(json_data["総合評価"])
+        return csv_row
