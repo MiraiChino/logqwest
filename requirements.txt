@@ -1,3 +1,4 @@
+graphviz
 duckdb
 google-generativeai
 grpcio==1.67.1

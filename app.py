@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import streamlit as st
+import graphviz
 
 from common import get_adventure_path, get_outcome_emoji, load_usage_data
 from adventure import run_adventure_streaming, ADVENTURE_COST
@@ -18,7 +19,45 @@ st.set_page_config(
     page_icon="💎",
     layout="wide",
 )
+DEFAULT_LOCATION_EMOJI = "👤"
 
+
+def generate_map(location_history, current_location):
+    """location履歴から地図を生成する"""
+    g = graphviz.Graph(
+        graph_attr={'rankdir': 'BT', 'ratio': 'fill'},
+    )
+    node_ids = {}
+    node_counter = 0
+
+    # location履歴からノードを作成
+    for loc in location_history:
+        if loc not in node_ids:
+            node_ids[loc] = f"n{node_counter}"
+            node_counter += 1
+
+    # ノードの描画 (現在地を強調)
+    for loc, nid in node_ids.items():
+        if loc == current_location:
+            g.node(nid, label=f"{DEFAULT_LOCATION_EMOJI}{loc}")
+        else:
+            g.node(nid, label=loc)
+
+    # ユニークなエッジを作成 (重複を排除)
+    edges = set()
+    for i in range(len(location_history) - 1):
+        src, dst = location_history[i], location_history[i+1]
+        if src in node_ids and dst in node_ids:
+            # エッジの順序を考慮しない (A-B と B-A を同じエッジとみなす場合)
+            sorted_edge = tuple(sorted((node_ids[src], node_ids[dst])))
+            if sorted_edge not in edges:
+                edges.add(sorted_edge)
+
+    # エッジの描画
+    for src_id, dst_id in edges:
+        g.edge(src_id, dst_id, arrowhead="none")
+
+    return g
 
 def _process_adventure_log(adventure_log_content: str, start_time: datetime, adventurer_name: str) -> str:
     """冒険ログの内容を処理して、タイムスタンプ付きのログ行リスト（HTML形式）を返す"""
@@ -109,39 +148,77 @@ def show_home(adventure_history):
     """ホーム画面を表示"""
     st.title("💎 Logqwest")
 
-    if 'run_button' in st.session_state and st.session_state.run_button:
-        st.session_state.running_adventure = True
-    else:
-        st.session_state.running_adventure = False
+    # カラムレイアウトを作成
+    left_column, right_column = st.columns([3, 1])
 
-    if st.button(f"冒険者を雇う（¥{ADVENTURE_COST}の出資）", disabled=st.session_state.running_adventure, key="run_button"):
-        message_container = st.empty()
-        summary_container = st.empty()
-        accumulated_messages = ""
+    # 右側のカラムにマップを表示
+    with right_column:
+        adventurer_name_container = st.empty() # 冒険者名表示用のコンテナ
+        map_container = st.empty() # マップ表示用のコンテナ
 
-        # 冒険開始前のメッセージ
-        initial_message_html = "<span style='color: #888; font-style: italic;'>冒険者を探しています...</span><br>"
-        accumulated_messages += initial_message_html
-        message_container.markdown(accumulated_messages, unsafe_allow_html=True)
-        time.sleep(3)
+    # 左側のカラムにテキストログなどを表示
+    with left_column:
+        if 'run_button' in st.session_state and st.session_state.run_button:
+            st.session_state.running_adventure = True
+        else:
+            st.session_state.running_adventure = False
 
-        for event in run_adventure_streaming():
-            if event["type"] == "error":
-                st.error(event["error"])
-                break
-            elif event["type"] == "hiring":
-                hiring_message_html = f"<span style='color: #2ecc71;'>✦ 冒険者『{event['adventurer']}』を旅立たせました。 ✦</span><br>"
-                accumulated_messages += hiring_message_html
-            elif event["type"] == "message":
-                time_html = f"<span style='color: gray; font-size:0.9em; margin-right:8px;'>{event['time']}</span>"
-                text_html = f"<span style='font-size:1em;'>{event['text']}</span><br>"
-                accumulated_messages += time_html + text_html
-            elif event["type"] == "summary":
-                summary_container.markdown(f"### 冒険結果\n{event['text']}")
-            message_container.markdown(accumulated_messages, unsafe_allow_html=True) # イベントごとに message_container を更新
-            time.sleep(0.1)
-        if st.button("戻る"):
-            st.rerun()
+        if 'location_history' not in st.session_state:
+            st.session_state.location_history = []
+
+        if 'adventurer' not in st.session_state:
+            st.session_state.adventurer = ""
+
+        return_button_container = st.empty() # 戻るボタン用のコンテナ
+        summary_container = st.empty() # 冒険サマリー用のコンテナ
+        message_container = st.empty() # メッセージコンテナ
+        if st.button(f"冒険者を雇う（¥{ADVENTURE_COST}の出資）", disabled=st.session_state.running_adventure, key="run_button"):
+            st.session_state.location_history = []
+            st.session_state.adventurer = ""
+            accumulated_messages = []
+            summary_container.empty() # コンテナを空にする
+            return_button_container.empty() # 戻るボタンコンテナを空にする
+
+            # 冒険開始前のメッセージ
+            initial_message_html = "<span style='color: #888; font-style: italic;'>冒険者を探しています...</span><br>"
+            accumulated_messages.insert(0, initial_message_html) # リストの先頭に追加
+            message_container.markdown("".join(accumulated_messages), unsafe_allow_html=True)
+            time.sleep(3)
+
+            for event in run_adventure_streaming():
+                if event["type"] == "error":
+                    message_container.error(event["error"])
+                    break
+                elif event["type"] == "hiring":
+                    hiring_message_html = f"<span style='color: #2ecc71;'>✦ 冒険者『{event['adventurer']}』を旅立たせました。 ✦</span><br>"
+                    accumulated_messages.insert(0, hiring_message_html)
+                    st.session_state.adventurer = event['adventurer'] # 冒険者名をセッションステートに保存
+                    with right_column: # 右カラムのコンテナを使用
+                        adventurer_name_container.markdown(f"{st.session_state.adventurer}の現在地") # 冒険者名を表示
+                elif event["type"] == "message":
+                    time_html = f"<span style='color: gray; font-size:0.9em; margin-right:8px;'>{event['time']}</span>"
+                    text_html = f"<span style='font-size:1em;'>{event['text']}</span><br>"
+                    message_html = time_html + text_html
+                    accumulated_messages.insert(0, message_html)
+
+                    current_location = event.get("location", "")
+                    if current_location and (not st.session_state.location_history or st.session_state.location_history[-1] != current_location): # location が存在し、履歴にない or 最新の場所と異なる場合のみ追加
+                        st.session_state.location_history.append(current_location)
+
+                    # 地図を更新 (右側のカラムの map_container を使用)
+                    map = generate_map(st.session_state.location_history, current_location)
+                    if map: # map が None でない場合のみ表示
+                        with right_column: # マップ表示を右側のカラムに限定
+                            map_container.graphviz_chart(map)
+
+                elif event["type"] == "summary":
+                    summary_container.markdown(f"### 冒険結果\n{event['text']}")
+                message_container.markdown("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
+                time.sleep(0.1)
+            if return_button_container.button("戻る", key="return_button"):
+                st.session_state.location_history = []
+                st.session_state.adventurer = ""
+                st.rerun()
 
 
 def main():

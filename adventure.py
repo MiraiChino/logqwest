@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
 
-from common import DATA_DIR, get_area_csv_path, get_adventure_path, load_usage_data, save_usage_data
+from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_location_path, load_usage_data, save_usage_data
 
 ADVENTURE_COST = 100
 DEBUG_MODE = True
@@ -114,8 +114,12 @@ def run_adventure_streaming():
 
     selected_adventure = select_unused_adventure(target_files, adventure_history) # 冒険履歴を渡す
     adventure_file = get_adventure_path(area=selected_area, adv=selected_adventure)
+    location_file = get_location_path(area=selected_area, adv=selected_adventure)
     if not adventure_file.exists():
         yield {"type": "error", "error": f"ファイルが見つかりません: {adventure_file}"}
+        return
+    if not location_file.exists():
+        yield {"type": "error", "error": f"ファイルが見つかりません: {location_file}"}
         return
 
     names_file = DATA_DIR / "names.txt"
@@ -131,24 +135,29 @@ def run_adventure_streaming():
     total_time = timedelta()
     start_time = datetime.now().isoformat(timespec='seconds')
     current_time = datetime.now() if DEBUG_MODE else None
-    with adventure_file.open("r", encoding="utf-8") as f:
-        for line in f:
-            time_increment = timedelta(minutes=2.5)
-            if DEBUG_MODE:
-                current_time += time_increment
-            else:
-                current_time = datetime.now()
-            total_time += time_increment
+    try:
+        with adventure_file.open("r", encoding="utf-8") as f_adv, location_file.open("r", encoding="utf-8") as f_loc:
+            for line_adv, line_loc in zip(f_adv, f_loc): # adventure_fileとlocation_fileを同時に読み込む
+                time_increment = timedelta(minutes=2.5)
+                if DEBUG_MODE:
+                    current_time += time_increment
+                else:
+                    current_time = datetime.now()
+                total_time += time_increment
 
-            time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
-            line_text = line.strip().format_map(defaultdict(str, name=adventurer_name))
-            # 各イベントで時刻とテキストを別々に yield する
-            yield {"type": "message", "time": time_str, "text": line_text}
+                time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
+                line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name))
+                location_text = line_loc.strip()
+                # 各イベントで時刻、テキスト、ロケーションを yield する
+                yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
 
-            if DEBUG_MODE:
-                time.sleep(time_increment.total_seconds() / 60)
-            else:
-                time.sleep(time_increment.total_seconds())
+                if DEBUG_MODE:
+                    time.sleep(time_increment.total_seconds() / 60)
+                else:
+                    time.sleep(time_increment.total_seconds())
+    except Exception as e: # location_fileのopenに失敗した場合、エラーメッセージをyield
+        yield {"type": "error", "error": f"locationファイルの読み込みエラー: {e}"}
+        return
 
     # 履歴の追加
     adventure_entry = {
