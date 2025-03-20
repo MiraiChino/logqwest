@@ -1,8 +1,11 @@
 .DS_Store
 __pycache__/
 venv
+*.egg-info
 
 data*
 prompt
 user_data
 check_results
+logs
+.aider*

@@ -6,8 +6,18 @@ from urllib.parse import urlencode
 import streamlit as st
 import graphviz
 
-from common import get_adventure_path, get_outcome_emoji, load_usage_data
+from src.utils.file_handler import FileHandler, FileStructure
+from src.utils.config import ConfigManager
 from adventure import run_adventure_streaming, ADVENTURE_COST
+from pathlib import Path
+
+config_manager = ConfigManager(Path("prompt/config.json"))
+file_structure = FileStructure(
+    data_dir=config_manager.paths.data_dir,
+    check_result_dir=config_manager.paths.check_result_dir,
+    prompt_dir=config_manager.paths.prompt_dir
+)
+file_handler = FileHandler(file_structure)
 
 
 # ロケール設定
@@ -21,6 +31,15 @@ st.set_page_config(
 )
 DEFAULT_LOCATION_EMOJI = "👤"
 
+
+def get_outcome_emoji(outcome: str) -> str:
+    """結果に応じて絵文字を返す"""
+    outcome_emojis = {
+        "大成功": "💎",
+        "成功": "🎁",
+        "失敗": "❌",
+    }
+    return outcome_emojis.get(outcome, "")
 
 def generate_map(location_history, current_location):
     """location履歴から地図を生成する"""
@@ -36,9 +55,9 @@ def generate_map(location_history, current_location):
             node_ids[loc] = f"n{node_counter}"
             node_counter += 1
 
-    # ノードの描画 (現在地を強調)
+    # ノードの描画
     for loc, nid in node_ids.items():
-        if loc == current_location:
+        if current_location and loc == current_location:
             g.node(nid, label=f"{DEFAULT_LOCATION_EMOJI}{loc}")
         else:
             g.node(nid, label=loc)
@@ -50,7 +69,7 @@ def generate_map(location_history, current_location):
         if src in node_ids and dst in node_ids:
             # エッジの順序を考慮しない (A-B と B-A を同じエッジとみなす場合)
             sorted_edge = tuple(sorted((node_ids[src], node_ids[dst])))
-            if sorted_edge not in edges:
+            if sorted_edge not in edges and src != dst:
                 edges.add(sorted_edge)
 
     # エッジの描画
@@ -87,7 +106,7 @@ def display_past_adventure(entry):
         unsafe_allow_html=True,
     )
 
-    adventure_file = get_adventure_path(area=entry['area'], adv=entry['filename'])
+    adventure_file = file_handler.get_adventure_path(entry['area'], entry['filename'])
     if not adventure_file.exists():
         st.error("冒険記録ファイルが見つかりません")
         return
@@ -117,9 +136,28 @@ def display_past_adventure(entry):
     col3.metric("冒険者", entry["adventurer"])
     col4.metric("エリア", entry["area"])
 
-    st.markdown("#### 冒険ログ")
-    log_html = _process_adventure_log(adventure_log_content, start_time, entry["adventurer"]) # HTML文字列を取得
-    st.markdown(log_html, unsafe_allow_html=True) # markdown で HTML を表示
+    # カラムレイアウトを作成
+    left_column, right_column = st.columns([3, 1])
+
+    # 右側のカラムにマップを表示
+    with right_column:
+        map_container = st.empty() # マップ表示用のコンテナ
+
+    with left_column:
+        st.markdown("#### 冒険ログ")
+        log_html = _process_adventure_log(adventure_log_content, start_time, entry["adventurer"]) # HTML文字列を取得
+        st.markdown(log_html, unsafe_allow_html=True) # markdown で HTML を表示
+
+    # マップを表示
+    location_history_path = file_handler.get_location_path(entry['area'], entry['filename'])
+    if location_history_path.exists():
+        with location_history_path.open("r", encoding="utf-8") as f:
+            location_history = [loc.strip() for loc in f.readlines() if loc.strip()]
+        if location_history:
+            adv_map = generate_map(location_history, None) # current_location は None
+            if adv_map:
+                with right_column:
+                    map_container.graphviz_chart(adv_map)
 
 
 def show_adventure_history_sidebar(adventure_history):
@@ -200,16 +238,16 @@ def show_home(adventure_history):
                     text_html = f"<span style='font-size:1em;'>{event['text']}</span><br>"
                     message_html = time_html + text_html
                     accumulated_messages.insert(0, message_html)
-
+                    
                     current_location = event.get("location", "")
                     if current_location and (not st.session_state.location_history or st.session_state.location_history[-1] != current_location): # location が存在し、履歴にない or 最新の場所と異なる場合のみ追加
                         st.session_state.location_history.append(current_location)
 
                     # 地図を更新 (右側のカラムの map_container を使用)
-                    map = generate_map(st.session_state.location_history, current_location)
-                    if map: # map が None でない場合のみ表示
+                    adv_map = generate_map(st.session_state.location_history, current_location)
+                    if adv_map: # adv_map が None でない場合のみ表示
                         with right_column: # マップ表示を右側のカラムに限定
-                            map_container.graphviz_chart(map)
+                            map_container.graphviz_chart(adv_map)
 
                 elif event["type"] == "summary":
                     summary_container.markdown(f"### 冒険結果\n{event['text']}")
@@ -223,7 +261,7 @@ def show_home(adventure_history):
 
 def main():
     """メイン関数： Streamlitアプリケーションの実行ロジック"""
-    usage_data = load_usage_data()
+    usage_data = file_handler.load_usage_data()
     adventure_history = usage_data.get("adventure_history", [])
     st.session_state.running_adventure = False
 

@@ -1,3 +1,4 @@
+setuptools
 graphviz
 duckdb
 google-generativeai

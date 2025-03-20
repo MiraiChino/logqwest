@@ -5,7 +5,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
 
-from common import DATA_DIR, get_area_csv_path, get_adventure_path, get_location_path, load_usage_data, save_usage_data
+from src.utils.file_handler import FileHandler, FileStructure
+from src.utils.config import ConfigManager
+
+config_manager = ConfigManager(Path("prompt/config.json"))
+file_structure = FileStructure(
+    data_dir=config_manager.paths.data_dir,
+    check_result_dir=config_manager.paths.check_result_dir,
+    prompt_dir=config_manager.paths.prompt_dir
+)
+file_handler = FileHandler(file_structure)
 
 ADVENTURE_COST = 100
 DEBUG_MODE = True
@@ -16,13 +25,13 @@ DEFAULT_NAME = "アーサー"
 
 def load_valid_areas() -> list[str]:
     """有効なエリア一覧をCSVから読み込み、対応するCSVファイルが存在するエリアのみ返す。"""
-    areas_file = DATA_DIR / "areas.csv"
+    areas_file = file_structure.data_dir / "areas.csv"
     valid_areas = []
     with areas_file.open("r", encoding="utf-8") as f:
         for row in csv.reader(f):
             if row:
                 area = row[0].strip()
-                if get_area_csv_path(area).exists():
+                if file_handler.get_area_csv_path(area).exists():
                     valid_areas.append(area)
     return valid_areas
 
@@ -39,7 +48,7 @@ def load_scenario_mappings(area: str) -> dict:
     指定エリアのCSVからシナリオのマッピングを読み込み、
     結果毎にファイル名のリストを返す。
     """
-    csv_path =  get_area_csv_path(area)
+    csv_path =  file_handler.get_area_csv_path(area)
     mappings = {"大成功": [], "成功": [], "失敗": []}
     with csv_path.open("r", encoding="utf-8") as f:
         for row in csv.reader(f):
@@ -92,7 +101,7 @@ def run_adventure_streaming():
         "成功": {"chance": 45, "prize": 110},
         "失敗": {"chance": 50, "prize": 0}
     }
-    usage_data = load_usage_data()
+    usage_data = file_handler.load_usage_data()
     adventure_history = usage_data.get("adventure_history", []) # 冒険履歴をロード
     valid_areas = load_valid_areas()
     if not valid_areas:
@@ -113,8 +122,8 @@ def run_adventure_streaming():
         return
 
     selected_adventure = select_unused_adventure(target_files, adventure_history) # 冒険履歴を渡す
-    adventure_file = get_adventure_path(area=selected_area, adv=selected_adventure)
-    location_file = get_location_path(area=selected_area, adv=selected_adventure)
+    adventure_file = file_handler.get_adventure_path(selected_area, selected_adventure)
+    location_file = file_handler.get_location_path(selected_area, selected_adventure)
     if not adventure_file.exists():
         yield {"type": "error", "error": f"ファイルが見つかりません: {adventure_file}"}
         return
@@ -122,7 +131,7 @@ def run_adventure_streaming():
         yield {"type": "error", "error": f"ファイルが見つかりません: {location_file}"}
         return
 
-    names_file = DATA_DIR / "names.txt"
+    names_file = file_structure.data_dir / "names.txt"
     adventurer_name = select_adventurer_name(names_file)
 
     # 雇用メッセージを追加
@@ -136,25 +145,33 @@ def run_adventure_streaming():
     start_time = datetime.now().isoformat(timespec='seconds')
     current_time = datetime.now() if DEBUG_MODE else None
     try:
-        with adventure_file.open("r", encoding="utf-8") as f_adv, location_file.open("r", encoding="utf-8") as f_loc:
-            for line_adv, line_loc in zip(f_adv, f_loc): # adventure_fileとlocation_fileを同時に読み込む
-                time_increment = timedelta(minutes=2.5)
-                if DEBUG_MODE:
-                    current_time += time_increment
-                else:
-                    current_time = datetime.now()
-                total_time += time_increment
+        adventure_log_content = file_handler.read_text(adventure_file)
+        location_log_content = file_handler.read_text(location_file)
+        if adventure_log_content is None or location_log_content is None:
+            yield {"type": "error", "error": "冒険ファイルまたは位置情報ファイルの読み込みに失敗しました"}
+            return
 
-                time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
-                line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name))
-                location_text = line_loc.strip()
-                # 各イベントで時刻、テキスト、ロケーションを yield する
-                yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
+        adventure_lines = adventure_log_content.splitlines()
+        location_lines = location_log_content.splitlines()
 
-                if DEBUG_MODE:
-                    time.sleep(time_increment.total_seconds() / 60)
-                else:
-                    time.sleep(time_increment.total_seconds())
+        for line_adv, line_loc in zip(adventure_lines, location_lines): # adventure_fileとlocation_fileの内容を同時に読み込む
+            time_increment = timedelta(minutes=2.5)
+            if DEBUG_MODE:
+                current_time += time_increment
+            else:
+                current_time = datetime.now()
+            total_time += time_increment
+
+            time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
+            line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name))
+            location_text = line_loc.strip()
+            # 各イベントで時刻、テキスト、ロケーションを yield する
+            yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
+
+            if DEBUG_MODE:
+                time.sleep(time_increment.total_seconds() / 60)
+            else:
+                time.sleep(time_increment.total_seconds())
     except Exception as e: # location_fileのopenに失敗した場合、エラーメッセージをyield
         yield {"type": "error", "error": f"locationファイルの読み込みエラー: {e}"}
         return
@@ -168,9 +185,9 @@ def run_adventure_streaming():
         "adventurer": adventurer_name,
         "filename": selected_adventure
     }
-    usage_data["adventure_history"].append(adventure_entry)
-
-    save_usage_data(usage_data)
+    current_usage_data = file_handler.load_usage_data() # usage_dataをロード
+    current_usage_data["adventure_history"].append(adventure_entry)
+    file_handler.save_usage_data(current_usage_data) # usage_dataを保存
 
     hours, remainder = divmod(total_time.total_seconds(), 3600)
     minutes = remainder // 60
