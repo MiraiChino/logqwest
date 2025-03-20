@@ -49,14 +49,22 @@ class AdventureDetailView(BaseView):
             st.text(numbered_content)
         elif content and not location:
             st.warning(f"{adventure_name}の位置情報が存在しません。")
+            numbered_content = self._create_numbered_content(content)
+            st.text(numbered_content)
         else:
             st.warning(f"{adventure_name}の冒険テキストが存在しません。")
 
-    def _create_numbered_content(self, content: str, location: str) -> str:
-        return "\n".join(
-            f"{i+1}. [{loc}] {line}" 
-            for i, (line, loc) in enumerate(zip(
-                content.splitlines(), 
-                location.splitlines()
-            ))
-        )
+    def _create_numbered_content(self, content: str, location: str = None) -> str:
+        if location is None:
+            return "\n".join(
+                f"{i+1}. {line}" 
+                for i, line in enumerate(content.splitlines())
+            )
+        else:
+            return "\n".join(
+                f"{i+1}. [{loc}] {line}" 
+                for i, (line, loc) in enumerate(zip(
+                    content.splitlines(), 
+                    location.splitlines()
+                ))
+            )

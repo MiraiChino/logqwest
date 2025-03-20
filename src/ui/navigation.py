@@ -53,5 +53,5 @@ class SidebarNavigation:
         if self.progress_tracker.is_area_complete(area):
             if self.progress_tracker.is_area_all_checked(area):
                 return f"✅{area}"
-            return f"❗{area}"
+            return f"🚧{area}"
         return area

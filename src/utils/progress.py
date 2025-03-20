@@ -34,8 +34,10 @@ class ProgressTracker:
         check_log = self.file_handler.get_check_path(area, "log")
         check_adv = self.file_handler.get_check_path(area, "adv")
         check_loc = self.file_handler.get_check_path(area, "loc")
-        
-        return all(path.exists() for path in [check_log, check_adv, check_loc])
+
+        area_status = self.get_area_status(area)
+        if all(path.exists() for path in [check_log, check_adv, check_loc]) and area_status.completion_ratio == 1.0 and area_status.check_ratio == 1.0:
+            return True
 
     def get_area_status(self, area_name: str) -> ProgressStatus:
         adventure_files = self._count_adventure_files(area_name)
@@ -57,16 +59,16 @@ class ProgressTracker:
 
     def _count_adventure_files(self, area_name: str) -> int:
         area_path = self.file_handler.get_area_path(area_name)
-        return len(list(area_path.glob("*.txt")))
+        return len(list(f for f in area_path.glob("*.txt") if not f.name.startswith("loc_")))
 
     def _count_check_files(self, area_name: str) -> int:
-        check_path = self.file_handler.get_check_path(area_name, "log")
-        return len(list(check_path.parent.glob("*.csv")))
+        area_path = self.file_handler.get_area_path(area_name)
+        return len(list(f for f in area_path.glob("*.txt") if f.name.startswith("loc_") and self._is_file_complete(f)))
 
     def _count_completed_files(self, area_name: str) -> int:
         area_path = self.file_handler.get_area_path(area_name)
         return len([f for f in area_path.glob("*.txt") 
-                   if self._is_file_complete(f)])
+                   if not f.name.startswith("loc_") and self._is_file_complete(f)])
 
     def is_adventure_complete(self, area_name: str, adventure_name: str) -> bool:
         adventure_path = self.file_handler.get_adventure_path(area_name, adventure_name)
