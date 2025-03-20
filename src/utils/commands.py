@@ -7,6 +7,7 @@ from src.generators import AreaGenerator, AdventureGenerator, LogGenerator, Loca
 from src.utils import FileHandler
 from src.utils.csv_handler import CSVHandler
 from src.utils.retry import retry_on_failure
+from src.utils.progress import ProgressTracker
 
 
 @dataclass
@@ -29,6 +30,7 @@ class CommandHandler:
         self.logger = logger
         self.file_handler = FileHandler(self.config.paths)
         self.csv_handler = CSVHandler()
+        self.progress_tracker = ProgressTracker(self.file_handler)
 
     def execute_area_command(self, count: int = 1) -> None:
         area_generator = AreaGenerator(
@@ -37,6 +39,14 @@ class CommandHandler:
             self.config.paths.data_dir / "areas.csv",
             self.config
         )
+        for area in area_generator.areas.keys():
+            if self.progress_tracker.is_area_complete(area) and self.progress_tracker.is_area_all_checked(area):
+                pass
+            else:
+                self.logger.warning(f"未完了: {area}")
+                if not self.context.debug_mode:
+                    self.logger.warning("未完了エリアがあるため終了します")
+                    return
         
         for _ in range(1 if self.context.debug_mode else count):
             area_data = area_generator.generate_new_area()
