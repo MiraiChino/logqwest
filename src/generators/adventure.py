@@ -75,7 +75,7 @@ class AdventureGenerator(ContentGenerator):
             if chapter.get("number") != f"{i}章":
                 raise ValueError(f"第{i}章の番号が一致しません: {chapter.get('number')}")
             content = chapter.get("content")
-            if self.config_manager.ng_words.intersection(content.split()):
+            if set(self.config_manager.ng_words).intersection(content.split()):
                 raise ValueError(f"第{i}章にNGワードが含まれています: {content}")
 
     def save(self, adventure_data: AdventureData, csv_path: Path) -> None:

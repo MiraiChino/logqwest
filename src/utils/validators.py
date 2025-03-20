@@ -46,7 +46,7 @@ class ContentValidator:
         required_keys = {"number", "title", "content"}
         return (
             all(key in chapter for key in required_keys) and
-            not self.rules.forbidden_words.intersection(chapter["content"].split())
+            not set(self.rules.forbidden_words).intersection(chapter["content"].split())
         )
 
     def validate_area_content(self, content: Dict) -> None:
