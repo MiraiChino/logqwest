@@ -142,18 +142,25 @@ class CommandHandler:
         area_name: str,
         result_filter: Optional[str]
     ) -> bool:
-        area_data = self._load_area_data(area_name)
-        existing_adventures = self._get_existing_adventures(area_name)
-        for adventure_type in self._filter_adventure_types(result_filter):
-            for num in adventure_type["nums"]:
-                adventure_name = f"{adventure_type['result']}{num}_{area_name}"
-                if adventure_name not in existing_adventures:
-                    debug_breaked = self._generate_and_check_adventure(
-                        generator, checker, area_name, area_data, adventure_name, 
-                        adventure_type["result"]
-                    )
-                    if debug_breaked == "debug_breaked":
-                        return True
+        try:
+            area_data = self._load_area_data(area_name)
+            existing_adventures = self._get_existing_adventures(area_name)
+            for adventure_type in self._filter_adventure_types(result_filter):
+                for num in adventure_type["nums"]:
+                    adventure_name = f"{adventure_type['result']}{num}_{area_name}"
+                    if adventure_name not in existing_adventures:
+                        debug_breaked = self._generate_and_check_adventure(
+                            generator, checker, area_name, area_data, adventure_name, 
+                            adventure_type["result"]
+                        )
+                        if debug_breaked == "debug_breaked":
+                            return True
+        except RetryLimitExeeded as e:
+            self.logger.error("冒険: リトライ回数上限に達しました。")
+            self.logger.delete(f"冒険: {area_name}のエリアを削除します。")
+            for message in self.file_handler._delete_areas([area_name]):
+                self.logger.simple(message)
+            raise e
 
     def _process_area_logs(
         self,
@@ -161,14 +168,21 @@ class CommandHandler:
         checker: LogChecker,
         area_name: str
     ) -> None:
-        adventures = self._get_area_adventures(area_name)
-        for adventure in adventures:
-            if not self._is_log_generated(area_name, adventure.name):
-                debug_breaked = self._generate_and_check_log(
-                    generator, checker, area_name, adventure
-                )
-                if debug_breaked == "debug_breaked":
-                    return True
+        try:
+            adventures = self._get_area_adventures(area_name)
+            for adventure in adventures:
+                if not self._is_log_generated(area_name, adventure.name):
+                    debug_breaked = self._generate_and_check_log(
+                        generator, checker, area_name, adventure
+                    )
+                    if debug_breaked == "debug_breaked":
+                        return True
+        except RetryLimitExeeded as e:
+            self.logger.error("ログ: リトライ回数上限に達しました。")
+            self.logger.delete(f"ログ: {adventure.name}の冒険を削除します。")
+            for message in self.file_handler._delete_adventures(area_name, [adventure.name]):
+                self.logger.simple(message)
+            raise e
 
     def _process_area_locations(
         self,
@@ -176,14 +190,21 @@ class CommandHandler:
         checker: LocationChecker,
         area_name: str
     ) -> None:
-        adventures = self._get_area_adventures(area_name)
-        for adventure in adventures:
-            if not self._is_location_generated(area_name, adventure.name) and self._is_log_generated(area_name, adventure.name):
-                debug_breaked = self._generate_and_check_location(
-                    generator, checker, area_name, adventure
-                )
-                if debug_breaked == "debug_breaked":
-                    return True
+        try:
+            adventures = self._get_area_adventures(area_name)
+            for adventure in adventures:
+                if not self._is_location_generated(area_name, adventure.name) and self._is_log_generated(area_name, adventure.name):
+                    debug_breaked = self._generate_and_check_location(
+                        generator, checker, area_name, adventure
+                    )
+                    if debug_breaked == "debug_breaked":
+                        return True
+        except RetryLimitExeeded as e:
+            self.logger.error("位置: リトライ回数上限に達しました。")
+            self.logger.delete(f"位置: {adventure.name}の冒険ログを削除します。")
+            for message in self.file_handler._delete_logs(area_name, [adventure.name]):
+                self.logger.simple(message)
+            raise e
 
     def _load_area_data(self, area_name: str) -> Dict:
         area_csv = self.file_handler.get_all_areas_csv_path()
@@ -265,12 +286,6 @@ class CommandHandler:
                 print(check_result)
                 return "debug_breaked"
             return True
-        except RetryLimitExeeded as e:
-            self.logger.error("冒険: リトライ回数上限に達しました。")
-            self.logger.delete(f"冒険: {area_name}のエリアを削除します。")
-            for message in self.file_handler._delete_areas([area_name]):
-                self.logger.simple(message)
-            raise e
         except Exception as e:
             raise e
 
@@ -301,12 +316,6 @@ class CommandHandler:
                 print(check_result)
                 return "debug_breaked"
             return True
-        except RetryLimitExeeded as e:
-            self.logger.error("ログ: リトライ回数上限に達しました。")
-            self.logger.delete(f"ログ: {adventure.name}の冒険を削除します。")
-            for message in self.file_handler._delete_adventures(area_name, [adventure.name]):
-                self.logger.simple(message)
-            raise e
         except Exception as e:
             raise e
         finally:
@@ -344,12 +353,6 @@ class CommandHandler:
                 print(check_result)
                 return "debug_breaked"
             return True
-        except RetryLimitExeeded as e:
-            self.logger.error("位置: リトライ回数上限に達しました。")
-            self.logger.delete(f"位置: {adventure.name}の冒険ログを削除します。")
-            for message in self.file_handler._delete_logs(area_name, [adventure.name]):
-                self.logger.simple(message)
-            raise e
         except Exception as e:
             raise e
 
