@@ -10,6 +10,7 @@ class LogLevel(Enum):
     WARNING = "🚧"
     ERROR = "❌"
     DELETE = "🔥"
+    SIMPLE = ""
 
 class Logger:
     def __init__(self, log_file: Optional[Path] = None):
@@ -19,7 +20,10 @@ class Logger:
 
     def log(self, message: str, level: LogLevel = LogLevel.INFO) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted_message = f"{timestamp} {level.value} {message}"
+        if level == LogLevel.SIMPLE:
+            formatted_message = f"{timestamp} {message}"
+        else:
+            formatted_message = f"{timestamp} {level.value} {message}"
         print(formatted_message)
         if self.log_file:
             with self.log_file.open('a', encoding='utf-8') as f:
@@ -42,3 +46,6 @@ class Logger:
 
     def delete(self, message: str) -> None:
         self.log(message, LogLevel.DELETE)
+
+    def simple(self, message: str) -> None:
+        self.log(message, LogLevel.SIMPLE)

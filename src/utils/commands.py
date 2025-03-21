@@ -8,7 +8,7 @@ from src.checkers import AdventureChecker, LogChecker, LocationChecker
 from src.generators import AreaGenerator, AdventureGenerator, LogGenerator, LocationGenerator
 from src.utils import FileHandler
 from src.utils.csv_handler import CSVHandler
-from src.utils.retry import retry_on_failure, RateLimitExeeded
+from src.utils.retry import retry_on_failure, RateLimitExeeded, RetryLimitExeeded
 from src.utils.progress import ProgressTracker
 
 
@@ -243,27 +243,36 @@ class CommandHandler:
         adventure_name: str,
         result: str,
     ) -> str:
-        # 冒険 生成
-        adventure = generator.generate_new_adventure(adventure_name, result, area_name)
-        self.logger.generate(f"冒険: {adventure_name}")
-        if self.context.debug_mode:
-            print(adventure)
+        try:
+            # 冒険 生成
+            adventure = generator.generate_new_adventure(adventure_name, result, area_name)
+            self.logger.generate(f"冒険: {adventure_name}")
+            if self.context.debug_mode:
+                print(adventure)
 
-        # 冒険 チェック
-        check_result = checker.check_adventure(
-            area=','.join(area_data.values()),
-            summary=','.join(adventure.chapters),
-            adventure_name=adventure_name
-        )
+            # 冒険 チェック
+            check_result = checker.check_adventure(
+                area=','.join(area_data.values()),
+                summary=','.join(adventure.chapters),
+                adventure_name=adventure_name
+            )
 
-        self.logger.success(f"冒険: {adventure_name}")
-        generator.save(adventure, self.file_handler.get_area_csv_path(area_name))
-        checker.save(check_result, self.file_handler.get_check_path(area_name, "adv"))
+            self.logger.success(f"冒険: {adventure_name}")
+            generator.save(adventure, self.file_handler.get_area_csv_path(area_name))
+            checker.save(check_result, self.file_handler.get_check_path(area_name, "adv"))
 
-        if self.context.debug_mode:
-            print(check_result)
-            return "debug_breaked"
-        return True
+            if self.context.debug_mode:
+                print(check_result)
+                return "debug_breaked"
+            return True
+        except RetryLimitExeeded as e:
+            self.logger.error("冒険: リトライ回数上限に達しました。")
+            self.logger.delete(f"冒険: {area_name}のエリアを削除します。")
+            for message in self.file_handler._delete_areas([area_name]):
+                self.logger.simple(message)
+            raise e
+        except Exception as e:
+            raise e
 
     @retry_on_failure()
     def _generate_and_check_log(
@@ -292,6 +301,12 @@ class CommandHandler:
                 print(check_result)
                 return "debug_breaked"
             return True
+        except RetryLimitExeeded as e:
+            self.logger.error("ログ: リトライ回数上限に達しました。")
+            self.logger.delete(f"ログ: {adventure.name}の冒険を削除します。")
+            for message in self.file_handler._delete_adventures(area_name, [adventure.name]):
+                self.logger.simple(message)
+            raise e
         except Exception as e:
             raise e
         finally:
@@ -329,6 +344,12 @@ class CommandHandler:
                 print(check_result)
                 return "debug_breaked"
             return True
+        except RetryLimitExeeded as e:
+            self.logger.error("位置: リトライ回数上限に達しました。")
+            self.logger.delete(f"位置: {adventure.name}の冒険ログを削除します。")
+            for message in self.file_handler._delete_logs(area_name, [adventure.name]):
+                self.logger.simple(message)
+            raise e
         except Exception as e:
             raise e
 

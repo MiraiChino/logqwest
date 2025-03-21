@@ -9,6 +9,9 @@ T = TypeVar('T')
 class RateLimitExeeded(Exception):
     pass
 
+class RetryLimitExeeded(Exception):
+    pass
+
 def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
@@ -33,7 +36,7 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
                 if attempt < max_retries:
                     time.sleep(wait_time)
                     
-            print(f"❌ {attempt}/{max_retries}: リトライ回数上限に達しました。")
+            raise RetryLimitExeeded(f"❌ {attempt}/{max_retries}: リトライ回数上限に達しました。")
             
         return wrapper
     return decorator
