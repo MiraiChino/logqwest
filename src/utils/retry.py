@@ -6,7 +6,7 @@ from typing import Callable, TypeVar, Any
 
 T = TypeVar('T')
 
-class MaxRetriesExeeded(Exception):
+class RateLimitExeeded(Exception):
     pass
 
 def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
@@ -25,7 +25,7 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
 
                 except Exception as e:
                     if any(err in str(e) for err in ["429", "Rate limit", "RESOURCE_EXHAUSTED"]):
-                        raise ValueError("Rate limit exceeded")
+                        raise RateLimitExeeded("Rate limit exceeded")
                     else:
                         error = traceback.format_exc()
                 print(f"❌ {attempt}/{max_retries}: {error}") 

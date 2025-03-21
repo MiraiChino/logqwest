@@ -1,12 +1,14 @@
+import sys
+import time
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable, Any
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 from src.checkers import AdventureChecker, LogChecker, LocationChecker
 from src.generators import AreaGenerator, AdventureGenerator, LogGenerator, LocationGenerator
 from src.utils import FileHandler
 from src.utils.csv_handler import CSVHandler
-from src.utils.retry import retry_on_failure
+from src.utils.retry import retry_on_failure, RateLimitExeeded
 from src.utils.progress import ProgressTracker
 
 
@@ -49,7 +51,12 @@ class CommandHandler:
                     return
         
         for _ in range(1 if self.context.debug_mode else count):
-            area_data = area_generator.generate_new_area()
+            try:
+                area_data = area_generator.generate_new_area()
+            except RateLimitExeeded:
+                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
+                time.sleep(60 * 15)
+                sys.exit(1)
             self.logger.generate(f"エリア: {area_data.name}")
             area_generator.save(area_data)
             if self.context.debug_mode:
@@ -69,12 +76,17 @@ class CommandHandler:
         )
 
         for area_name in self.file_handler.load_all_area_names():
-            debug_breaked = self._process_area_adventures(
-                adventure_generator,
-                adventure_checker,
-                area_name,
-                result_filter
-            )
+            try:
+                debug_breaked = self._process_area_adventures(
+                    adventure_generator,
+                    adventure_checker,
+                    area_name,
+                    result_filter
+                )
+            except RateLimitExeeded:
+                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
+                time.sleep(60 * 15)
+                sys.exit(1)
             if debug_breaked:
                 break
 
@@ -92,7 +104,12 @@ class CommandHandler:
         )
         
         for area_name in self.file_handler.load_all_area_names():
-            debug_breaked = self._process_area_logs(log_generator, log_checker, area_name)
+            try:
+                debug_breaked = self._process_area_logs(log_generator, log_checker, area_name)
+            except RateLimitExeeded:
+                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
+                time.sleep(60 * 15)
+                sys.exit(1)
             if debug_breaked:
                 break
 
@@ -109,7 +126,12 @@ class CommandHandler:
         )
         
         for area_name in self.file_handler.load_all_area_names():
-            debug_breaked = self._process_area_locations(location_generator, location_checker, area_name)
+            try:
+                debug_breaked = self._process_area_locations(location_generator, location_checker, area_name)
+            except RateLimitExeeded:
+                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
+                time.sleep(60 * 15)
+                sys.exit(1)
             if debug_breaked:
                 break
 
@@ -346,16 +368,3 @@ class CommandHandler:
             previous_log = content
             
         return self.file_handler.read_text(temp_path)
-
-    def _operate_with_retry(self, operation: Callable, check: Callable, *args, **kwargs) -> Optional[Any]:
-        for attempt in range(self.config.max_retries):
-            try:
-                result = operation(*args, **kwargs)
-                if check(result):
-                    return result
-                else:
-                    self.logger.warning(f"Invalid result for {operation.__name__}", attempt=attempt, total=self.config.max_retries)
-            except Exception as e:
-                self.logger.error(str(e), attempt=attempt, total=self.config.max_retries)
-            
-        return None
