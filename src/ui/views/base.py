@@ -32,7 +32,7 @@ class BaseView:
     def _get_adventure_label(self, area_name: str, adventure_name: str) -> str:
         return (f"✅{adventure_name}" 
                 if self.progress_tracker.is_adventure_complete(area_name, adventure_name) 
-                else adventure_name)
+                else f"🚧{adventure_name}")
     
     def format_cell_content(self, value):
         if isinstance(value, str):

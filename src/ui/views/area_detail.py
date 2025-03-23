@@ -78,7 +78,8 @@ class AreaDetailView(BaseView):
         check_loc_df = self.load_check_csv(area_name, "loc")
 
         for adventure_name in unique_adventure_names:
-            with st.expander(f"冒険名: {adventure_name}", expanded=False): # 初期状態は閉じたexpander
+            label = self._get_adventure_label(area_name, adventure_name)
+            with st.expander(f"{label}{adventure_name}", expanded=False): # 初期状態は閉じたexpander
                 adventure_summary_df = adventures_df[adventures_df["冒険名"] == adventure_name]
                 if not adventure_summary_df.empty:
                     clickable_adv_df = self._make_adventures_clickable(adventure_summary_df, area_name)
