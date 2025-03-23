@@ -34,31 +34,130 @@ class BaseView:
                 if self.progress_tracker.is_adventure_complete(area_name, adventure_name) 
                 else adventure_name)
     
-    def _display_dataframe_with_checkbox(self, df: pd.DataFrame, df_clickable: pd.DataFrame) -> pd.DataFrame:
-        header_cols = st.columns([0.5] + [1] * len(df_clickable.columns))
-        with header_cols[0]:
-            st.write("**選択**")
-        for col, header in zip(header_cols[1:], df_clickable.columns):
-            with col:
-                st.write(f"**{header}**")
+    def format_cell_content(self, value):
+        if isinstance(value, str):
+            if ';' in value:
+                formatted_text = ""
+                for element in value.split(';'):
+                    if ':' in element:
+                        key, val = element.split(':', 1)
+                        formatted_text += f"**{key}**: {val}  \n"
+                    else:
+                        formatted_text += f"{element}  \n"
+                return st.markdown(formatted_text)
+            elif ':' in value:
+                key, val = value.split(':', 1)
+                return st.markdown(f"**{key}**: {val}")
+        return st.write(value)
 
+    def display_dataframe(self, df: pd.DataFrame,
+                        df_clickable: pd.DataFrame = None,
+                        display_checkbox: bool = False, 
+                        group_columns: bool = False, 
+                        start_content_col_idx: int = 1) -> pd.DataFrame:
+        if df_clickable is None:
+            df_clickable = df
         selected_indices = []
-        for idx, row in df_clickable.iterrows():
-            row_cols = st.columns([0.5] + [1] * len(row))
-            checkbox_key = f"checkbox_{row.iloc[1]}_{idx}_{st.session_state.get('delete_counter', 0)}"
-            
-            with row_cols[0]:
-                if st.checkbox("選択", key=checkbox_key, label_visibility="collapsed"):
-                    selected_indices.append(idx)
-            
-            with row_cols[1]:
-                st.html(row.iloc[0])
+        header_columns_config = [0.5] if display_checkbox else []
 
-            for value, col in zip(row.iloc[2:], row_cols[2:]):
-                with col:
-                    st.write(value)
-                    
-        return df.loc[selected_indices] if selected_indices else pd.DataFrame()
+        if group_columns:
+            grouped_headers = {}
+            for key in df.columns:
+                if isinstance(key, str) and " - " in key:
+                    parent_header = key.split(" - ", 1)[0]
+                    grouped_headers.setdefault(parent_header, True)
+                else:
+                    grouped_headers[key] = True
+            header_columns_config += [1] * len(grouped_headers)
+            header_cols = st.columns(header_columns_config)
+
+            col_idx = 0
+            if display_checkbox:
+                with header_cols[col_idx]:
+                    st.write("**選択**")
+                col_idx += 1
+
+            header_keys = list(grouped_headers.keys())
+            for i in range(len(header_keys)):
+                header = header_keys[i]
+                with header_cols[col_idx]:
+                    st.write(f"**{header}**")
+                col_idx += 1
+
+        else:
+            header_columns_config += [1] * len(df.columns)
+            header_cols = st.columns(header_columns_config)
+
+            col_idx = 0
+            if display_checkbox:
+                with header_cols[col_idx]:
+                    st.write("**選択**")
+                col_idx += 1
+            for header in df.columns:
+                with header_cols[col_idx]:
+                    st.write(f"**{header}**")
+                col_idx += 1
+
+        for idx, row in df_clickable.iterrows():
+            row_columns_config = [0.5] if display_checkbox else []
+            if group_columns:
+                grouped_row = {}
+                for key, value in row.items():
+                    if isinstance(key, str) and " - " in key:
+                        parent, child = key.split(" - ", 1)
+                        grouped_row.setdefault(parent, {})[child] = value
+                    else:
+                        grouped_row[key] = value
+                row_columns_config += [1] * len(grouped_row)
+            else:
+                row_columns_config += [1] * len(row)
+            row_cols = st.columns(row_columns_config)
+            row_col_idx = 0
+
+            if display_checkbox:
+                checkbox_key_suffix = st.session_state.get('delete_counter', 0)
+                checkbox_key = f"checkbox_{row.values[1]}_{idx}_{checkbox_key_suffix}"
+                with row_cols[row_col_idx]:
+                    if st.checkbox("選択", key=checkbox_key, label_visibility="collapsed"):
+                        selected_indices.append(idx)
+                row_col_idx += 1
+
+            if group_columns:
+                grouped_row = {}
+                for key, value in row.items():
+                    if isinstance(key, str) and " - " in key:
+                        parent, child = key.split(" - ", 1)
+                        grouped_row.setdefault(parent, {})[child] = value
+                    else:
+                        grouped_row[key] = value
+
+                for group_name, group_content in grouped_row.items():
+                    with row_cols[row_col_idx]:
+                        if isinstance(group_content, dict):
+                            for k, v in group_content.items():
+                                st.markdown(f"**{k}**: {v}")
+                        else:
+                            st.html(group_content)
+                    row_col_idx += 1
+            else:
+                for i in range(len(row)):
+                    with row_cols[row_col_idx]:
+                        if i < start_content_col_idx:
+                            st.html(row.iloc[i])
+                        else:
+                            self.format_cell_content(row.iloc[i])
+                        row_col_idx += 1
+
+        return df.loc[selected_indices] if display_checkbox and selected_indices else pd.DataFrame()
+
+    def _display_dataframe_with_checkbox_grouped(self, df: pd.DataFrame, df_clickable: pd.DataFrame, start_idx: int = 2) -> pd.DataFrame:
+        return self.display_dataframe(df, df_clickable, display_checkbox=True, group_columns=True, start_content_col_idx=start_idx)
+
+    def _display_dataframe_with_checkbox(self, df: pd.DataFrame, df_clickable: pd.DataFrame, start_idx: int = 2) -> pd.DataFrame:
+        return self.display_dataframe(df, df_clickable, display_checkbox=True, group_columns=False, start_content_col_idx=start_idx)
+
+    def _display_dataframe(self, df: pd.DataFrame, start_idx: int = 1):
+        return self.display_dataframe(df, display_checkbox=False, group_columns=False, start_content_col_idx=start_idx)
 
     def _handle_deletion(self, selected_df, area_name: str, delete_type: str):
         if selected_df.empty:
@@ -100,12 +199,6 @@ class BaseView:
             )
         st.write(label)
         st.progress(ratio)
-
-    def _make_dataframe_as_html(self, df: pd.DataFrame) -> str:
-        """Convert DataFrame to HTML with custom styling"""
-        return df.style.hide(axis="index").set_properties(
-            **{'vertical-align': 'top'}
-        ).to_html(escape=False, index=False)
 
     @st.cache_data(max_entries=10)
     def load_area_csv(_self, area_name: str):

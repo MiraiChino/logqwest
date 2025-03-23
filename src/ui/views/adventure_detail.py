@@ -7,7 +7,7 @@ class AdventureDetailView(BaseView):
         st.title(f"{area_name} - {adventure_name} 詳細")
 
         adventures_df = self.load_area_csv(area_name)
-        is_rendered_adv = self._render_row(adventures_df, adventure_name, "冒険サマリーｓ")
+        is_rendered_adv = self._render_row(adventures_df, adventure_name, "冒険サマリー")
 
         log_check_df = self.load_check_csv(area_name, "log")
         is_rendered_logcheck = self._render_row(log_check_df, adventure_name, "ログチェック")
@@ -29,7 +29,7 @@ class AdventureDetailView(BaseView):
             adventure_row = df[df["冒険名"] == adventure_name]
             if not adventure_row.empty:
                 st.markdown(f"**{info_title}**")
-                st.markdown(self._make_dataframe_as_html(adventure_row), unsafe_allow_html=True)
+                self._display_dataframe(adventure_row)
                 return True
             else:
                 st.warning(f"{adventure_name}の{info_title}は見つかりません。")

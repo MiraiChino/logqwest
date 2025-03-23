@@ -5,25 +5,25 @@ from dataclasses import dataclass
 from src.core.generator import ContentGenerator
 from src.core.client import ResponseFormat
 from src.utils.csv_handler import CSVHandler
-from src.utils.validators import ContentValidator, ValidationRules
 from src.utils.retry import retry_on_failure
 
 
 @dataclass
 class AreaData:
     name: str
+    difficulty: str
     geographic_features: str
     history_legend: str
     risks_challenges: str
     treasure: str
     treasure_location: str
-    items: List[str]
-    dangerous_creatures: List[str]
-    harmless_creatures: List[str]
-    waypoints: List[str]
-    cities: List[str]
-    routes: List[str]
-    rest_points: List[str]
+    items: List[Dict]
+    dangerous_creatures: List[Dict]
+    harmless_creatures: List[Dict]
+    waypoints: List[Dict]
+    cities: List[Dict]
+    routes: List[Dict]
+    rest_points: List[Dict]
 
 class AreaGenerator(ContentGenerator):
     def __init__(self, client, template_path: Path, areas_csv_path: Path, config_manager):
@@ -32,19 +32,13 @@ class AreaGenerator(ContentGenerator):
         self.areas_csv_path = areas_csv_path
         self.config_manager = config_manager
         self.areas = self._load_existing_areas()
-        self.validator_rules = ValidationRules(
-            forbidden_words=self.config_manager.ng_words,
-            required_area_fields=self.config_manager.csv_headers_area,
-            existing_area_names=list(self.areas.keys()),
-            existing_treasure_names=[area.treasure for area in self.areas.values()]
-        )
-        self.validator = ContentValidator(self.validator_rules)
 
     def _load_existing_areas(self) -> Dict[str, AreaData]:
         areas_data = {}
         for row in self.csv_handler.read_rows(self.areas_csv_path):
             area_data = AreaData(
                 name=row["エリア名"],
+                difficulty=row["難易度"].split(":")[0],
                 geographic_features=row["地理的特徴"],
                 history_legend=row["歴史や伝説"],
                 risks_challenges=row["リスクや挑戦"],
@@ -65,69 +59,107 @@ class AreaGenerator(ContentGenerator):
         return [item.split(":")[0].strip() for item in text.split(";") if ":" in item]
 
     @retry_on_failure()
-    def generate_new_area(self, reference_count: int = 0, area_name: Optional[str] = None) -> AreaData:
+    def generate_new_area(self, reference_count: int = -1, area_name: Optional[str] = None, difficulty: int = 1) -> AreaData:
         existing_areas = self._format_reference_areas(reference_count)
         response = self.generate(
             response_format=ResponseFormat.TEXT,
             existing_areas=existing_areas,
-            area_name=area_name or "新エリアの名称を記載してください。ありがちな命名パターン（例:忘れられし~、星詠みの~、魂喰らいの~など）や既存エリアの命名規則から脱却し、全く新しい名前にしてください。"
+            area_name=area_name or "世界観における固有名詞を含めた新エリアの名称を記載してください。「」のような修飾は避けシンプルな表現にしてください。（例：❌聖堂「アトニマ」、✅聖堂アトニマ）。ありがちな命名パターン（例:忘れられし~、星詠みの~、魂喰らいの~など）や既存エリアの命名規則から脱却し、全く新しい名前にしてください。",
+            difficulty=difficulty
         )
         content = self.extract_json(response)
-        self.validate_content(content)
+        self.validate_content(content, difficulty)
         return self.create_data(content)
 
     def _format_reference_areas(self, count: int) -> str:
         formatted_areas = []
+        if count == -1:
+            count = len(self.areas)
+        elif count > len(self.areas):
+            count = len(self.areas)
         for area in list(self.areas.values())[:count]:
             formatted_areas.append(f"{area.name},{area.treasure},{';'.join(area.waypoints)},{';'.join(area.cities)}")
         return "\n".join(formatted_areas)
 
-    def validate_content(self, content: Dict) -> None:
+    def validate_content(self, content: Dict, difficulty) -> None:
         try:
-            self.validator.validate_area_content(content) # ContentValidator でバリデーション
-            if not self.validator.validate_area_name(content["エリア名"]): # エリア名のバリデーション
-                raise ValueError(f"エリア名が既存のエリア名と重複しているか、禁止文字が含まれています: {content['エリア名']}")
-            if not self.validator.validate_treasure_name(content["財宝"]["名称"]): # 財宝名のバリデーション
-                treasure_name = content["財宝"]["名称"]
-                raise ValueError(f"財宝名が既存の財宝名と重複しています: {treasure_name}")
+            # 必須フィールドのチェック
+            for field in self.config_manager.csv_headers_area:
+                if field not in content:
+                    raise ValueError(f"必須フィールドがありません: {field}")
+                if content[field] == "":
+                    raise ValueError(f"必須フィールドが空です: {field}")
+
+            # 難易度のチェック
+            if str(difficulty) != str(content["難易度"]):
+                raise ValueError(f"難易度が設定値と異なります: {difficulty} != {content['難易度']}")
+
+            # NGワードチェック
+            for field in self.config_manager.csv_headers_area: # 全フィールドをチェック
+                value = str(content.get(field, '')) # エラーを防ぐため get を使用し、文字列に変換
+                if set(self.config_manager.ng_words).intersection(value.split()):
+                    raise ValueError(f"NGワードが含まれています: {field} - {value}")
+
+            # エリア名のバリデーション
+            areaname = content["エリア名"]
+            for invalid_char in {'~', '〜', '〰', '|', '[', ']', '「', '」', '『', '』', ':', ';', '@', '/', '>'}:
+                if invalid_char in areaname:
+                    raise ValueError(f"エリア名に禁止文字{invalid_char}が含まれています: {areaname}")
+
+            # エリア名の重複チェック
+            existing_areas = list(self.areas.keys())
+            for area in existing_areas:
+                if area in areaname:
+                    raise ValueError(f"エリア名が既存のエリア名と重複しています: {areaname}")
+            if areaname in existing_areas:
+                raise ValueError(f"エリア名が既存のエリア名と重複しています: {areaname}")
+
+            # 財宝名のバリデーション
+            treasure = content["財宝"]["名称"]
+            for area in self.areas.values():
+                existing_treasure = area.treasure
+                if existing_treasure in treasure or treasure in existing_treasure:
+                    raise ValueError(f"財宝名が既存の財宝名と重複しています: {treasure}")
         except ValueError as e:
             print(f"バリデーションエラー: {e}")
-            raise e # バリデーションエラーを再raise
+            raise e
 
     def _parse_listcontent(self, listcontent: List):
-        return [f"{c["名称"]}: {c["特徴"]}" for c in listcontent]
+        return ";".join(f"{c["名称"]}: {c["特徴"]}" for c in listcontent)
 
     def create_data(self, content: Dict) -> AreaData:
         return AreaData(
             name=content["エリア名"],
+            difficulty=f'{content["難易度"]}: {content["難易度設定の根拠"]}',
             geographic_features=content["地理的特徴"],
             history_legend=content["歴史や伝説"],
             risks_challenges=content["リスクや挑戦"],
             treasure=f'{content["財宝"]["名称"]}: {content["財宝"]["特徴"]}',
             treasure_location=content["財宝の隠し場所"],
-            items=self._parse_listcontent(content["採取できるアイテム"]),
-            dangerous_creatures=self._parse_listcontent(content["生息する危険な生物"]),
-            harmless_creatures=self._parse_listcontent(content["生息する無害な生物"]),
-            waypoints=self._parse_listcontent(content["経由地候補"]),
-            cities=self._parse_listcontent(content["近くの街"]),
-            routes=self._parse_listcontent(content["移動路"]),
-            rest_points=self._parse_listcontent(content["休憩ポイント"])
+            items=content["採取できるアイテム"],
+            dangerous_creatures=content["生息する危険な生物"],
+            harmless_creatures=content["生息する無害な生物"],
+            waypoints=content["経由地候補"],
+            cities=content["近くの街"],
+            routes=content["移動路"],
+            rest_points=content["休憩ポイント"]
         )
 
     def save(self, area_data: AreaData) -> None:
         row = [
             area_data.name,
+            area_data.difficulty,
             area_data.geographic_features,
             area_data.history_legend,
             area_data.risks_challenges,
             area_data.treasure,
             area_data.treasure_location,
-            ";".join(area_data.items),
-            ";".join(area_data.dangerous_creatures),
-            ";".join(area_data.harmless_creatures),
-            ";".join(area_data.waypoints),
-            ";".join(area_data.cities),
-            ";".join(area_data.routes),
-            ";".join(area_data.rest_points),
+            self._parse_listcontent(area_data.items),
+            self._parse_listcontent(area_data.dangerous_creatures),
+            self._parse_listcontent(area_data.harmless_creatures),
+            self._parse_listcontent(area_data.waypoints),
+            self._parse_listcontent(area_data.cities),
+            self._parse_listcontent(area_data.routes),
+            self._parse_listcontent(area_data.rest_points),
         ]
         self.csv_handler.write_row(self.areas_csv_path, row, headers=self.config_manager.csv_headers_area)

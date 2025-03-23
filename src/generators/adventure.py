@@ -18,7 +18,7 @@ class AdventureGenerator(ContentGenerator):
         super().__init__(client, template_path)
         self.csv_handler = CSVHandler()
         self.areas_csv_path = areas_csv_path
-        self.config_manager = config_manager
+        self.config = config_manager
         self.areas = self._load_area_data()
 
     def _load_area_data(self) -> Dict[str, Dict]:
@@ -29,7 +29,7 @@ class AdventureGenerator(ContentGenerator):
         
         response = self.generate(
             response_format=ResponseFormat.JSON,
-            result=result,
+            result=self.config.result_template[result],
             adventure_name=name,
             **self._prepare_area_prompt_data(area_info)
         )
@@ -44,8 +44,8 @@ class AdventureGenerator(ContentGenerator):
 
     def _prepare_area_prompt_data(self, area_info: Dict) -> Dict:
         return {
-            key.lower(): area_info[self.config_manager.csv_headers_area[i]]
-            for i, key in enumerate(self.config_manager.area_info_keys_for_prompt)
+            key.lower(): area_info[self.config.csv_headers_area[i]]
+            for i, key in enumerate(self.config.area_info_keys_for_prompt)
         }
 
     def create_data(self, name: str, result: str, content: Dict) -> AdventureData:
@@ -63,7 +63,7 @@ class AdventureGenerator(ContentGenerator):
         if not root_keys.issubset(content.keys()):
             raise ValueError(f"ルートキーが不足しています。必須キー: {root_keys}")
         chapters = content.get("chapters", [])
-        if len(chapters) != len(self.config_manager.chapter_settings):
+        if len(chapters) != len(self.config.chapter_settings):
             raise ValueError(f"章の数が無効です: {len(chapters)}/8")
         for i, chapter in enumerate(chapters, 1):
             if not isinstance(chapter, dict):
@@ -75,7 +75,7 @@ class AdventureGenerator(ContentGenerator):
             if chapter.get("number") != f"{i}章":
                 raise ValueError(f"第{i}章の番号が一致しません: {chapter.get('number')}")
             content = chapter.get("content")
-            if set(self.config_manager.ng_words).intersection(content.split()):
+            if set(self.config.ng_words).intersection(content.split()):
                 raise ValueError(f"第{i}章にNGワードが含まれています: {content}")
 
     def save(self, adventure_data: AdventureData, csv_path: Path) -> None:
@@ -84,5 +84,5 @@ class AdventureGenerator(ContentGenerator):
             adventure_data.result,
             *adventure_data.chapters
         ]
-        self.csv_handler.write_row(csv_path, row, headers=self.config_manager.csv_headers_adventure)
+        self.csv_handler.write_row(csv_path, row, headers=self.config.csv_headers_adventure)
         self.csv_handler.sort_by_result(csv_path)

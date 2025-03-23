@@ -78,7 +78,7 @@ class FileHandler:
 
     def load_all_areas_check_csv(self) -> pd.DataFrame:
         check_csv_path = self.get_all_areas_check_path()
-        return pd.read_csv(check_csv_path) if check_csv_path.exists() else None
+        return pd.read_csv(check_csv_path, sep=',') if check_csv_path.exists() else None
 
     def read_adventure_log(self, area_name: str, adventure_name: str) -> Optional[str]:
         return self.read_text(self.get_adventure_path(area_name, adventure_name))

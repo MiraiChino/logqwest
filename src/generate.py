@@ -28,7 +28,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     
     area_parser = subparsers.add_parser("area")
-    area_parser.add_argument("count", type=int, nargs="?", default=1)
+    area_parser.add_argument("difficulty", type=int, choices=range(1, 11), nargs="?", default=1)
     
     adventures_parser = subparsers.add_parser("adventure")
     adventures_parser.add_argument("result", nargs="?")
@@ -55,7 +55,7 @@ def main():
     
     command_handler = CommandHandler(context, config, logger)
     commands = {
-        "area": lambda: command_handler.execute_area_command(args.count),
+        "area": lambda: command_handler.execute_area_command(args.difficulty),
         "adventure": lambda: command_handler.execute_adventure_command(args.result),
         "log": command_handler.execute_log_command,
         "location": command_handler.execute_location_command

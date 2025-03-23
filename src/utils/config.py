@@ -3,11 +3,6 @@ from typing import Dict, List
 from pathlib import Path
 import json
 
-@dataclass
-class CheckerConfig:
-    headers: List[str]
-    check_keys: Dict[str, List[str]]
-    check_mark: str = "✅"
 
 @dataclass
 class PathConfig:
@@ -28,29 +23,12 @@ class ConfigManager:
             return json.load(f)
 
     @property
+    def check_marks(self) -> List[str]:
+        return self.config.get("CHECK_MARKS", ["✅"])
+
+    @property
     def max_retries(self) -> int:
         return self.config.get("MAX_RETRIES", 10)
-
-    @property
-    def adventure_config(self) -> CheckerConfig:
-        return CheckerConfig(
-            headers=self.config["ADVCHECK_HEADERS"],
-            check_keys=self.config["ADVCHECK_KEYS"]
-        )
-
-    @property
-    def log_config(self) -> CheckerConfig:
-        return CheckerConfig(
-            headers=self.config["LOGCHECK_HEADERS"],
-            check_keys=self.config["LOGCHECK_KEYS"]
-        )
-
-    @property
-    def location_config(self) -> CheckerConfig:
-        return CheckerConfig(
-            headers=self.config["LOCATIONCHECK_HEADERS"],
-            check_keys=self.config["LOCATIONCHECK_KEYS"]
-        )
 
     @property
     def paths(self) -> PathConfig:
@@ -62,8 +40,29 @@ class ConfigManager:
         )
 
     @property
+    def area_check_keys(self) -> List[str]:
+        return self.config.get("AREACHECK_KEYS", [])
+
+    @property
+    def adventure_check_keys(self) -> List[str]:
+        return self.config.get("ADVCHECK_KEYS", [])
+
+    @property
+    def log_check_keys(self) -> List[str]:
+        return self.config.get("LOGCHECK_KEYS", [])
+
+
+    @property
+    def location_check_keys(self) -> List[str]:
+        return self.config.get("LOCATIONCHECK_KEYS", [])
+
+    @property
     def ng_words(self) -> List[str]:
         return self.config.get("NG_WORDS", [])
+
+    @property
+    def result_template(self) -> str:
+        return self.config.get("RESULT_TEMPLATE", "")
 
     @property
     def area_info_text(self) -> str:

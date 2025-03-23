@@ -13,7 +13,10 @@ class AreaListView(BaseView):
         total_areas = len(areas_df)
         completed_areas = sum(1 for area in areas_df["エリア名"] 
                             if self.progress_tracker.is_area_complete(area))
-        
+        if total_areas == 0:
+            st.write("エリアデータが存在しません。")
+            return
+
         self.render_progress_bar(
             completed_areas / total_areas,
             f"エリアデータ存在数: {completed_areas} / {total_areas}"
@@ -32,17 +35,14 @@ class AreaListView(BaseView):
             return df[df["エリア名"].str.contains(keyword, case=False)]
         return df
 
-
     def _render_area_table(self, df: pd.DataFrame) -> str:
         df_clickable = self._make_areas_clickable(df)
-        selected_df = self._display_dataframe_with_checkbox(df, df_clickable)
-        self._handle_deletion_areas(selected_df)
-        # st.markdown(self._make_dataframe_as_html(df_clickable), unsafe_allow_html=True)
+        self._display_dataframe(df_clickable, start_idx=1)
 
     def _render_check_area_section(self, total: int):
         check_df = self.load_all_areas_check_csv()
         if check_df is not None:
             with st.expander(f"チェック: エリア({len(check_df)}/{total})"):
                 clickable_df = self._make_areas_clickable(check_df)
-                selected_df = self._display_dataframe_with_checkbox(check_df, clickable_df)
+                selected_df = self._display_dataframe_with_checkbox_grouped(check_df, clickable_df, start_idx=1)
                 self._handle_deletion_areas(selected_df)

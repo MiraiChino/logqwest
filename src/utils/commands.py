@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-from src.checkers import AdventureChecker, LogChecker, LocationChecker
+from src.checkers import AreaChecker, AdventureChecker, LogChecker, LocationChecker
 from src.generators import AreaGenerator, AdventureGenerator, LogGenerator, LocationGenerator
 from src.utils import FileHandler
 from src.utils.csv_handler import CSVHandler
@@ -34,12 +34,18 @@ class CommandHandler:
         self.csv_handler = CSVHandler()
         self.progress_tracker = ProgressTracker(self.file_handler)
 
-    def execute_area_command(self, count: int = 1) -> None:
+    def execute_area_command(self, difficulty: int = 1) -> None:
         area_generator = AreaGenerator(
             self.context.client,
             self.config.paths.prompt_dir / "new_area.txt",
             self.config.paths.data_dir / "areas.csv",
             self.config
+        )
+        area_checker = AreaChecker(
+            self.context.client,
+            self.config.paths.prompt_dir / "check_area.txt",
+            self.config.area_check_keys,
+            self.config.check_marks
         )
         for area in area_generator.areas.keys():
             if self.progress_tracker.is_area_complete(area) and self.progress_tracker.is_area_all_checked(area):
@@ -50,17 +56,7 @@ class CommandHandler:
                     self.logger.warning("未完了エリアがあるため終了します")
                     return
         
-        for _ in range(1 if self.context.debug_mode else count):
-            try:
-                area_data = area_generator.generate_new_area()
-            except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
-            self.logger.generate(f"エリア: {area_data.name}")
-            area_generator.save(area_data)
-            if self.context.debug_mode:
-                print(area_data)
+        self._generate_and_check_area(area_generator, area_checker, difficulty)
 
     def execute_adventure_command(self, result_filter: Optional[str] = None) -> None:
         adventure_generator = AdventureGenerator(
@@ -72,7 +68,8 @@ class CommandHandler:
         adventure_checker = AdventureChecker(
             self.context.client,
             self.config.paths.prompt_dir / "check_adventure.txt",
-            self.config.adventure_config
+            self.config.adventure_check_keys,
+            self.config.check_marks
         )
 
         for area_name in self.file_handler.load_all_area_names():
@@ -100,7 +97,8 @@ class CommandHandler:
         log_checker = LogChecker(
             self.context.client,
             self.config.paths.prompt_dir / "check_log.txt",
-            self.config.log_config
+            self.config.log_check_keys,
+            self.config.check_marks
         )
         
         for area_name in self.file_handler.load_all_area_names():
@@ -122,7 +120,8 @@ class CommandHandler:
         location_checker = LocationChecker(
             self.context.client,
             self.config.paths.prompt_dir / "check_location.txt",
-            self.config.location_config
+            self.config.location_check_keys,
+            self.config.check_marks
         )
         
         for area_name in self.file_handler.load_all_area_names():
@@ -254,6 +253,38 @@ class CommandHandler:
         location_path = self.file_handler.get_location_path(area_name, adventure_name)
         return location_path.exists()
 
+
+    @retry_on_failure()
+    def _generate_and_check_area(
+        self,
+        generator: AreaGenerator,
+        checker: AreaChecker,
+        difficulty: int
+    ) -> None:
+        try:
+            area_data = generator.generate_new_area(difficulty=difficulty)
+            if self.context.debug_mode:
+                print(area_data)
+            self.logger.generate(f"エリア: {area_data.name}")
+
+            check_result = checker.check_area(
+                area_data=area_data,
+                existing_df=self.file_handler.load_areas_csv()
+            )
+            if self.context.debug_mode:
+                print(check_result)
+            self.logger.success(f"エリア: {area_data.name}")
+
+            generator.save(area_data)
+            checker.save(check_result, self.file_handler.get_all_areas_check_path())
+            return True
+        except RateLimitExeeded:
+            self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
+            time.sleep(60 * 15)
+            sys.exit(1)
+        except Exception as e:
+            raise e
+
     @retry_on_failure()
     def _generate_and_check_adventure(
         self,
@@ -267,9 +298,9 @@ class CommandHandler:
         try:
             # 冒険 生成
             adventure = generator.generate_new_adventure(adventure_name, result, area_name)
-            self.logger.generate(f"冒険: {adventure_name}")
             if self.context.debug_mode:
                 print(adventure)
+            self.logger.generate(f"冒険: {adventure_name}")
 
             # 冒険 チェック
             check_result = checker.check_adventure(
@@ -277,13 +308,14 @@ class CommandHandler:
                 summary=','.join(adventure.chapters),
                 adventure_name=adventure_name
             )
+            if self.context.debug_mode:
+                print(check_result)
 
             self.logger.success(f"冒険: {adventure_name}")
             generator.save(adventure, self.file_handler.get_area_csv_path(area_name))
             checker.save(check_result, self.file_handler.get_check_path(area_name, "adv"))
 
             if self.context.debug_mode:
-                print(check_result)
                 return "debug_breaked"
             return True
         except Exception as e:
@@ -308,12 +340,13 @@ class CommandHandler:
             # ログ チェック
             summary = ','.join(adventure.chapters)
             check_result = checker.check_log(summary, log_content, adventure.name)
-            
+            if self.context.debug_mode:
+                print(check_result)
+
             self.logger.success(f"ログ: {adventure.name}")
             temp_path.replace(adventure_txt_path)  # 正常終了時のみ一時ファイルを本ファイルにリネーム
             checker.save(check_result, self.file_handler.get_check_path(area_name, "log"))
             if self.context.debug_mode:
-                print(check_result)
                 return "debug_breaked"
             return True
         except Exception as e:
@@ -336,21 +369,22 @@ class CommandHandler:
             log_content = self.file_handler.read_adventure_log(area_name, adventure.name)
             location_candidates = generator.get_location_candidates(area_name)
             location = generator.generate_location(area_name, log_content, location_candidates)
-            self.logger.generate(f"位置: {adventure.name}")
             if self.context.debug_mode:
                 print(location)
+            self.logger.generate(f"位置: {adventure.name}")
 
             # 位置 チェック
             log_with_location = "\n".join(f"[{loc}]: {text}" for text, loc in zip(log_content.splitlines(), location.splitlines()))
             check_result = checker.check_location(log_with_location, location_candidates, adventure.name)
-            
+            if self.context.debug_mode:
+                print(check_result)
+
             location_path = self.file_handler.get_location_path(area_name, adventure.name)
             self.file_handler.write_text(location_path, location)
             checker.save(check_result, self.file_handler.get_check_path(area_name, "loc"))
             self.logger.success(f"位置: {adventure.name}")
 
             if self.context.debug_mode:
-                print(check_result)
                 return "debug_breaked"
             return True
         except Exception as e:
@@ -384,9 +418,9 @@ class CommandHandler:
                 previous_log=previous_log,
             )
             
-            self.logger.generate(f"ログ {chapter_index+1}/{total}: {adventure.name}")
             if self.context.debug_mode:
                 print(content)
+            self.logger.generate(f"ログ {chapter_index+1}/{total}: {adventure.name}")
 
             self.file_handler.write_text(temp_path, content, append=True)
             previous_log = content
