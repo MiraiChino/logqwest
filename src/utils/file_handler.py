@@ -143,6 +143,14 @@ class FileHandler:
             df_areas.to_csv(areas_csv_path, index=False)
             yield f"🔥 エリア一覧: {areas}"
 
+        # Delete from areas check CSV
+        all_areas_check_csv_path = self.get_all_areas_check_path()
+        if all_areas_check_csv_path.exists():
+            df_all_areas_check = pd.read_csv(all_areas_check_csv_path)
+            df_all_areas_check = df_all_areas_check[~df_all_areas_check["エリア名"].isin(areas)]
+            df_all_areas_check.to_csv(all_areas_check_csv_path, index=False)
+            yield f"🔥 エリアチェック: {areas}"
+
         # Delete from area CSV
         for area in areas:
             #  Delete adventures
@@ -175,7 +183,7 @@ class FileHandler:
             df_check = pd.read_csv(check_adv_path)
             df_check = df_check[~df_check["冒険名"].isin(adventures)]
             df_check.to_csv(check_adv_path, index=False)
-            yield f"🔥 冒険ﾁｪｯｸ: {adventures}"
+            yield f"🔥 冒険チェック: {adventures}"
 
         # Cascade delete logs and locations
         yield from self._delete_logs(area_name, adventures)
@@ -194,7 +202,7 @@ class FileHandler:
             df_check = pd.read_csv(check_log_path)
             df_check = df_check[~df_check["冒険名"].isin(adventures)]
             df_check.to_csv(check_log_path, index=False)
-            yield f"🔥 ログﾁｪｯｸ: {adventures}"
+            yield f"🔥 ログチェック: {adventures}"
 
         # Cascade delete locations
         yield from self._delete_locations(area_name, adventures)
@@ -213,7 +221,7 @@ class FileHandler:
             df_check = pd.read_csv(check_loc_path)
             df_check = df_check[~df_check["冒険名"].isin(adventures)]
             df_check.to_csv(check_loc_path, index=False)
-            yield f"🔥 位置ﾁｪｯｸ: {adventures}"
+            yield f"🔥 位置チェック: {adventures}"
 
     def load_usage_data(self) -> dict:
         """
