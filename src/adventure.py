@@ -164,7 +164,7 @@ def run_adventure_streaming():
 
             time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
             line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name))
-            location_text = line_loc.strip()
+            location_text = line_loc.strip().format_map(defaultdict(str, name=adventurer_name))
             # 各イベントで時刻、テキスト、ロケーションを yield する
             yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
 
