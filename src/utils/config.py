@@ -57,6 +57,10 @@ class ConfigManager:
         return self.config.get("LOCATIONCHECK_KEYS", [])
 
     @property
+    def area_name_prompt(self) -> str:
+        return self.config.get("AREA_NAME_PROMPT", "")
+
+    @property
     def ng_words(self) -> List[str]:
         return self.config.get("NG_WORDS", [])
 

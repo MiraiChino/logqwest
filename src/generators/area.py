@@ -26,11 +26,11 @@ class AreaData:
     rest_points: List[Dict]
 
 class AreaGenerator(ContentGenerator):
-    def __init__(self, client, template_path: Path, areas_csv_path: Path, config_manager):
+    def __init__(self, client, template_path: Path, areas_csv_path: Path, config):
         super().__init__(client, template_path)
         self.csv_handler = CSVHandler()
         self.areas_csv_path = areas_csv_path
-        self.config_manager = config_manager
+        self.config = config
         self.areas = self._load_existing_areas()
 
     def _load_existing_areas(self) -> Dict[str, AreaData]:
@@ -64,7 +64,7 @@ class AreaGenerator(ContentGenerator):
         response = self.generate(
             response_format=ResponseFormat.TEXT,
             existing_areas=existing_areas,
-            area_name=area_name or "世界観における固有名詞を含めた新エリアの名称を記載してください。「」のような修飾は避けシンプルな表現にしてください。（例：❌聖堂「アトニマ」、✅聖堂アトニマ）。ありがちな命名パターン（例:忘れられし~、星詠みの~、魂喰らいの~など）や既存エリアの命名規則から脱却し、全く新しい名前にしてください。",
+            area_name=area_name or self.config.area_name_prompt,
             difficulty=difficulty
         )
         content = self.extract_json(response)
@@ -84,7 +84,7 @@ class AreaGenerator(ContentGenerator):
     def validate_content(self, content: Dict, difficulty) -> None:
         try:
             # 必須フィールドのチェック
-            for field in self.config_manager.csv_headers_area:
+            for field in self.config.csv_headers_area:
                 if field not in content:
                     raise ValueError(f"必須フィールドがありません: {field}")
                 if content[field] == "":
@@ -95,9 +95,9 @@ class AreaGenerator(ContentGenerator):
                 raise ValueError(f"難易度が設定値と異なります: {difficulty} != {content['難易度']}")
 
             # NGワードチェック
-            for field in self.config_manager.csv_headers_area: # 全フィールドをチェック
+            for field in self.config.csv_headers_area: # 全フィールドをチェック
                 value = str(content.get(field, '')) # エラーを防ぐため get を使用し、文字列に変換
-                if set(self.config_manager.ng_words).intersection(value.split()):
+                if set(self.config.ng_words).intersection(value.split()):
                     raise ValueError(f"NGワードが含まれています: {field} - {value}")
 
             # エリア名のバリデーション
@@ -162,4 +162,4 @@ class AreaGenerator(ContentGenerator):
             self._parse_listcontent(area_data.routes),
             self._parse_listcontent(area_data.rest_points),
         ]
-        self.csv_handler.write_row(self.areas_csv_path, row, headers=self.config_manager.csv_headers_area)
+        self.csv_handler.write_row(self.areas_csv_path, row, headers=self.config.csv_headers_area)
