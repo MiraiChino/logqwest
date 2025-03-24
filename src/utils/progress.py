@@ -74,6 +74,20 @@ class ProgressTracker:
         adventure_path = self.file_handler.get_adventure_path(area_name, adventure_name)
         return self._is_file_complete(adventure_path)
 
+    def is_adventure_checked(self, area_name: str, adventure_name: str, check_type: str) -> bool:
+        check_df = self.file_handler.load_check_csv(area_name, check_type)
+        return adventure_name in check_df['冒険名'].values
+
+    def is_adventure_all_checked(self, area_name: str, adventure_name: str) -> bool:
+        if not self.is_adventure_checked(area_name, adventure_name, "adv"):
+            return False
+        if not self.is_adventure_checked(area_name, adventure_name, "log"):
+            return False
+        if not self.is_adventure_checked(area_name, adventure_name, "loc"):
+            return False
+        return True
+
+
     def _is_file_complete(self, file_path: Path, min_lines: int = 160) -> bool:
         if not file_path.exists():
             return False
