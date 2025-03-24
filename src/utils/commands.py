@@ -155,10 +155,6 @@ class CommandHandler:
                         if debug_breaked == "debug_breaked":
                             return True
         except RetryLimitExeeded as e:
-            self.logger.error("冒険: リトライ回数上限に達しました。")
-            self.logger.delete(f"冒険: {area_name}のエリアを削除します。")
-            for message in self.file_handler._delete_areas([area_name]):
-                self.logger.simple(message)
             raise e
 
     def _process_area_logs(
