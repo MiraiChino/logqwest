@@ -1,5 +1,6 @@
 import csv
 import time
+import traceback
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -169,10 +170,11 @@ def run_adventure_streaming():
             yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
 
             if DEBUG_MODE:
-                time.sleep(time_increment.total_seconds() / 60)
+                time.sleep(time_increment.total_seconds() / 3600)
             else:
                 time.sleep(time_increment.total_seconds())
     except Exception as e: # location_fileのopenに失敗した場合、エラーメッセージをyield
+        print(traceback.format_exc())
         yield {"type": "error", "error": f"locationファイルの読み込みエラー: {e}"}
         return
 

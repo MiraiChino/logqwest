@@ -104,6 +104,11 @@ class LogGenerator(ContentGenerator):
         for line in lines:
             if set(self.config_manager.ng_words).intersection(line.strip()):
                 raise ValueError(f"NGワードが含まれています: {line}")
+            try:
+                if line.format(name="name"):
+                    pass
+            except Exception as e:
+                raise ValueError(f"フォーマットエラー: {e} in  {line}")
         if len(lines) < 20:
             raise ValueError("抽出されたコンテンツの行数が20行未満です。")
 
