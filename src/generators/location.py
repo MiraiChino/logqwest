@@ -15,23 +15,25 @@ class LocationInfo:
     rest_points: List[str]
 
 class LocationGenerator(ContentGenerator):
-    def __init__(self, client, template_path: Path, areas_csv_path: Path):
+    def __init__(self, client, template_path: Path, areas_csv_paths: Path):
         super().__init__(client, template_path)
         self.csv_handler = CSVHandler()
-        self.areas_csv_path = areas_csv_path
+        self.areas_csv_paths = areas_csv_paths
         self.areas = self._load_area_locations()
 
     def _load_area_locations(self) -> Dict[str, LocationInfo]:
-        return {
-            row["エリア名"]: LocationInfo(
-                area=f"  - {row['エリア名']}:{row['地理的特徴']}",
-                waypoints=self._parse_locations(row["経由地候補"]),
-                cities=self._parse_locations(row["近くの街"]),
-                routes=self._parse_locations(row["移動路"]),
-                rest_points=self._parse_locations(row["休憩ポイント"])
-            )
-            for row in self.csv_handler.read_rows(self.areas_csv_path)
-        }
+        area_locations = {}
+        for areas_csv_path in self.areas_csv_paths:
+            for row in self.csv_handler.read_rows(self.areas_csv_path):
+                area_name = row["エリア名"]
+                area_locations[area_name] = LocationInfo(
+                    area=f"  - {area_name}:{row['地理的特徴']}",
+                    waypoints=self._parse_locations(row["経由地候補"]),
+                    cities=self._parse_locations(row["近くの街"]),
+                    routes=self._parse_locations(row["移動路"]),
+                    rest_points=self._parse_locations(row["休憩ポイント"])
+                )
+        return area_locations
 
     def _parse_locations(self, location_text: str) -> List[str]:
         return [

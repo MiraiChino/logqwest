@@ -24,18 +24,6 @@ DEBUG_OVERRIDE_AREA = None
 DEFAULT_NAME = "アーサー"
 
 
-def load_valid_areas() -> list[str]:
-    """有効なエリア一覧をCSVから読み込み、対応するCSVファイルが存在するエリアのみ返す。"""
-    areas_file = file_structure.data_dir / "areas.csv"
-    valid_areas = []
-    with areas_file.open("r", encoding="utf-8") as f:
-        for row in csv.reader(f):
-            if row:
-                area = row[0].strip()
-                if file_handler.get_area_csv_path(area).exists():
-                    valid_areas.append(area)
-    return valid_areas
-
 
 def select_outcome(outcomes: dict) -> str:
     """指定された確率情報に基づき、結果（キー）をランダムに選択する。"""
@@ -104,7 +92,7 @@ def run_adventure_streaming():
     }
     usage_data = file_handler.load_usage_data()
     adventure_history = usage_data.get("adventure_history", []) # 冒険履歴をロード
-    valid_areas = load_valid_areas()
+    valid_areas = file_handler.load_valid_areas()
     if not valid_areas:
         yield {"type": "error", "error": "有効なエリアがありません"}
         return

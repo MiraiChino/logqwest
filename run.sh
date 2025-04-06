@@ -4,6 +4,6 @@ while :; do
     python src/generate.py --model "$model" adventure
     python src/generate.py --model "$model" log
     python src/generate.py --model "$model" location
-    python src/generate.py --model "$model" area 1
+    python src/generate.py --model "$model" area
   done
 done

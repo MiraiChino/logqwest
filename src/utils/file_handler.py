@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional, List, Iterator
 from dataclasses import dataclass
 import json
+import csv
 
 import pandas as pd
 
@@ -23,8 +24,14 @@ class FileHandler:
                          self.structure.prompt_dir]:
             directory.mkdir(parents=True, exist_ok=True)
 
-    def get_all_areas_csv_path(self) -> Path:
-        return self.structure.data_dir / "areas.csv"
+    def get_all_areas_csv_path(self) -> List[Path]:
+        return list(self.structure.data_dir.rglob('lv*.csv'))
+
+    def get_lv_areas_csv_path(self, lv: int) -> Path:
+        return self.structure.data_dir / f"lv{lv}.csv"
+
+    def get_lv_check_areas_csv_path(self, lv: int) -> Path:
+        return self.structure.check_result_dir / f"lv{lv}.csv"
 
     def get_areas_dir(self) -> Path:
         return self.structure.data_dir
@@ -47,12 +54,21 @@ class FileHandler:
     def get_check_path(self, area_name: str, check_type: str) -> Path:
         return self.structure.check_result_dir / area_name / f"{check_type}_{area_name}.csv"
 
-    def get_all_areas_check_path(self) -> Path:
-        return self.structure.check_result_dir / "areas.csv"
+    def get_all_areas_check_path(self) -> List[Path]:
+        return list(self.structure.check_result_dir.glob('lv*.csv'))
 
     def load_areas_csv(self) -> pd.DataFrame:
-        areas_csv_path = self.get_all_areas_csv_path()
-        return pd.read_csv(areas_csv_path) if areas_csv_path.exists() else None
+        areas_csv_paths = self.get_all_areas_csv_path()
+        dfs = []
+        for areas_csv_path in areas_csv_paths:
+            if areas_csv_path.exists():
+                # CSVを結合して返す
+                df = pd.read_csv(areas_csv_path)
+                dfs.append(df)
+
+        # 全てのDataFrameを縦に結合（行方向に）
+        combined_df = pd.concat(dfs, ignore_index=True)
+        return combined_df
 
     def load_area_csv(self, area_name: str) -> pd.DataFrame:
         area_csv_path = self.get_area_csv_path(area_name)
@@ -72,13 +88,60 @@ class FileHandler:
             return []
         return df["エリア名"].tolist() if "エリア名" in df.columns else []
 
+    def load_nopast_area_names(self) -> List[str]:
+        df = self.load_areas_csv()
+        if df is None:
+            return []
+        if "エリア名" not in df.columns:
+            return []
+        if "過去エリア" not in df.columns:
+            return []
+        areas = df["エリア名"].tolist()
+        past_areas = df["過去エリア"].tolist()
+        return [area for area, past_area in zip(areas, past_areas) if past_area == "なし"]
+
+    def load_nonext_area_name_and_lv(self):
+        df = self.load_areas_csv()
+        if df is None:
+            return []
+        if "エリア名" not in df.columns:
+            return []
+        if "過去エリア" not in df.columns:
+            return []
+        areas = df["エリア名"].tolist()
+        past_areas = df["過去エリア"].tolist()
+        nonext_area_name = [area_name for area_name in areas if area_name not in past_areas][0]
+        difficulty = int(df[df["エリア名"] == nonext_area_name]["難易度"][0].split(":")[0])
+        return nonext_area_name, difficulty
+
     def load_check_csv(self, area_name: str, check_type: str) -> pd.DataFrame:
         check_csv_path = self.get_check_path(area_name, check_type)
         return pd.read_csv(check_csv_path) if check_csv_path.exists() else None
 
     def load_all_areas_check_csv(self) -> pd.DataFrame:
-        check_csv_path = self.get_all_areas_check_path()
-        return pd.read_csv(check_csv_path, sep=',') if check_csv_path.exists() else None
+        check_csv_paths = self.get_all_areas_check_path()
+        dfs = []
+        for check_csv_path in check_csv_paths:
+            if check_csv_path.exists():
+                # CSVを結合して返す
+                df = pd.read_csv(check_csv_path)
+                dfs.append(df)
+
+        # 全てのDataFrameを縦に結合（行方向に）
+        combined_df = pd.concat(dfs, ignore_index=True)
+        return combined_df
+
+    def load_valid_areas(self) -> list[str]:
+        """有効なエリア一覧をCSVから読み込み、対応するCSVファイルが存在するエリアのみ返す。"""
+        areas_file = self.get_all_areas_csv_path()
+        valid_areas = []
+        with areas_file.open("r", encoding="utf-8") as f:
+            for row in csv.reader(f):
+                if row:
+                    area = row[0].strip()
+                    if self.get_area_csv_path(area).exists():
+                        valid_areas.append(area)
+        return valid_areas
 
     def read_adventure_log(self, area_name: str, adventure_name: str) -> Optional[str]:
         return self.read_text(self.get_adventure_path(area_name, adventure_name))
@@ -144,12 +207,15 @@ class FileHandler:
             yield f"🔥 エリア一覧: {areas}"
 
         # Delete from areas check CSV
-        all_areas_check_csv_path = self.get_all_areas_check_path()
-        if all_areas_check_csv_path.exists():
-            df_all_areas_check = pd.read_csv(all_areas_check_csv_path)
-            df_all_areas_check = df_all_areas_check[~df_all_areas_check["エリア名"].isin(areas)]
-            df_all_areas_check.to_csv(all_areas_check_csv_path, index=False)
-            yield f"🔥 エリアチェック: {areas}"
+        all_areas_check_csv_paths = self.get_all_areas_check_path()
+        for areas_check_csv_path in all_areas_check_csv_paths:
+            if areas_check_csv_path.exists():
+                df_all_areas_check = pd.read_csv(areas_check_csv_path)
+                # area_namesに含まれるいずれかの文字列が"エリア名"列に含まれる行を除外
+                pattern = '|'.join(areas)
+                df_all_areas_check = df_all_areas_check[~df_all_areas_check["エリア名"].str.contains(pattern, na=False)]
+                df_all_areas_check.to_csv(areas_check_csv_path, index=False)
+                yield f"🔥 エリアチェック: {areas} from {areas_check_csv_path}"
 
         # Delete from area CSV
         for area in areas:

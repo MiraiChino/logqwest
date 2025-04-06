@@ -5,6 +5,14 @@ import csv
 class CSVHandler:
     def __init__(self):
         self.current_path = None
+
+    def write_headers(self, file_path: Path, headers: List[str]):
+        self.current_path = file_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with file_path.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+
     def read_rows(self, file_path: Path) -> List[Dict]:
         self.current_path = file_path
         if not file_path.exists():

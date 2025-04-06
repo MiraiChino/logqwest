@@ -38,7 +38,7 @@ class CommandHandler:
         area_generator = AreaGenerator(
             self.context.client,
             self.config.paths.prompt_dir / "new_area.txt",
-            self.config.paths.data_dir / "areas.csv",
+            self.file_handler.get_lv_areas_csv_path(difficulty),
             self.config
         )
         area_checker = AreaChecker(
@@ -47,22 +47,51 @@ class CommandHandler:
             self.config.area_check_keys,
             self.config.check_marks
         )
-        for area in area_generator.areas.keys():
-            if self.progress_tracker.is_area_complete(area) and self.progress_tracker.is_area_all_checked(area):
+        for area_name in self.file_handler.load_nopast_area_names():
+            if self.progress_tracker.is_area_complete(area_name) and self.progress_tracker.is_area_all_checked(area_name):
                 pass
             else:
-                self.logger.warning(f"未完了: {area}")
+                self.logger.warning(f"未完了: {area_name}")
                 if not self.context.debug_mode:
                     self.logger.warning("未完了エリアがあるため終了します")
                     return
         
         self._generate_and_check_area(area_generator, area_checker, difficulty)
 
+    def execute_locked_area_command(self, difficulty: int = 1) -> None:
+        area_checker = AreaChecker(
+            self.context.client,
+            self.config.paths.prompt_dir / "check_area.txt",
+            self.config.area_check_keys,
+            self.config.check_marks
+        )
+        
+        for area_name in self.file_handler.load_all_area_names():
+            if self.progress_tracker.is_area_complete(area_name) and self.progress_tracker.is_area_all_checked(area_name):
+                pass
+            else:
+                self.logger.warning(f"未完了: {area_name}")
+                if not self.context.debug_mode:
+                    self.logger.warning("未完了エリアがあるため終了します")
+                    return
+
+        # まだ次のエリアが生成されていないエリアを抽出
+        nonext_area_name, difficulty = self.file_handler.load_nonext_area_name_and_lv()
+
+        area_generator = AreaGenerator(
+            self.context.client,
+            self.config.paths.prompt_dir / "new_locked_area.txt",
+            self.file_handler.get_lv_areas_csv_path(difficulty + 1), # 次のレベルのエリアを生成する
+            self.config,
+            self.file_handler.get_lv_areas_csv_path(difficulty), #  前のレベルのエリアを参照する
+        )
+        self._generate_and_check_area(area_generator, area_checker, difficulty + 1, nonext_area_name)
+
     def execute_adventure_command(self, result_filter: Optional[str] = None) -> None:
         adventure_generator = AdventureGenerator(
             self.context.client,
             self.config.paths.prompt_dir / "new_adventure.txt",
-            self.config.paths.data_dir / "areas.csv",
+            self.file_handler.get_lv_areas_csv_path(1),
             self.config
         )
         adventure_checker = AdventureChecker(
@@ -72,7 +101,7 @@ class CommandHandler:
             self.config.check_marks
         )
 
-        for area_name in self.file_handler.load_all_area_names():
+        for area_name in self.file_handler.load_nopast_area_names():
             try:
                 debug_breaked = self._process_area_adventures(
                     adventure_generator,
@@ -91,7 +120,7 @@ class CommandHandler:
         log_generator = LogGenerator(
             self.context.client,
             self.config.paths.prompt_dir / "new_log.txt",
-            self.config.paths.data_dir / "areas.csv",
+            self.file_handler.get_lv_areas_csv_path(1),
             self.config
         )
         log_checker = LogChecker(
@@ -101,7 +130,7 @@ class CommandHandler:
             self.config.check_marks
         )
         
-        for area_name in self.file_handler.load_all_area_names():
+        for area_name in self.file_handler.load_nopast_area_names():
             try:
                 debug_breaked = self._process_area_logs(log_generator, log_checker, area_name)
             except RateLimitExeeded:
@@ -115,7 +144,7 @@ class CommandHandler:
         location_generator = LocationGenerator(
             self.context.client,
             self.config.paths.prompt_dir / "new_location.txt",
-            self.config.paths.data_dir / "areas.csv"
+            self.file_handler.get_all_areas_csv_path()
         )
         location_checker = LocationChecker(
             self.context.client,
@@ -202,10 +231,11 @@ class CommandHandler:
             raise e
 
     def _load_area_data(self, area_name: str) -> Dict:
-        area_csv = self.file_handler.get_all_areas_csv_path()
-        for row in self.csv_handler.read_rows(area_csv):
-            if row["エリア名"] == area_name: 
-                return row
+        area_csvs = self.file_handler.get_all_areas_csv_path()
+        for area_csv in area_csvs:
+            for row in self.csv_handler.read_rows(area_csv):
+                if row["エリア名"] == area_name: 
+                    return row
 
     def _get_existing_adventures(self, area_name: str) -> List[str]:
         area_csv = self.file_handler.get_area_csv_path(area_name)
@@ -249,16 +279,19 @@ class CommandHandler:
         location_path = self.file_handler.get_location_path(area_name, adventure_name)
         return location_path.exists()
 
-
     @retry_on_failure()
     def _generate_and_check_area(
         self,
         generator: AreaGenerator,
         checker: AreaChecker,
-        difficulty: int
+        difficulty: int,
+        past_area_name: Optional[str] = None,
     ) -> None:
         try:
-            area_data = generator.generate_new_area(difficulty=difficulty)
+            if past_area_name:
+                area_data = generator.generate_new_locked_area(past_area_name=past_area_name, difficulty=difficulty)
+            else:
+                area_data = generator.generate_new_area(difficulty=difficulty)
             if self.context.debug_mode:
                 print(area_data)
             self.logger.generate(f"エリア: {area_data.name}")
@@ -272,7 +305,7 @@ class CommandHandler:
             self.logger.success(f"エリア: {area_data.name}")
 
             generator.save(area_data)
-            checker.save(check_result, self.file_handler.get_all_areas_check_path())
+            checker.save(check_result, self.file_handler.get_lv_check_areas_csv_path(difficulty))
             return True
         except RateLimitExeeded:
             self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
