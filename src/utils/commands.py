@@ -239,7 +239,7 @@ class CommandHandler:
         checker: AdventureChecker,
         area_name: str,
         result_filter: Optional[str],
-        extractor: Optional[Extractor]
+        extractor: Optional[Extractor] = None
     ) -> bool:
         try:
             area_data = self._load_area_data(area_name)
