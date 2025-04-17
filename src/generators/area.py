@@ -24,7 +24,8 @@ class AreaData:
     cities: List[Dict]
     routes: List[Dict]
     rest_points: List[Dict]
-    past_area_name: str = "なし"
+    prev_area_name: str = "なし"
+    next_area_name: str = "なし"
 
 class AreaGenerator(ContentGenerator):
     def __init__(self, client, template_path: Path, areas_csv_path: Path, config, past_areas_csv_path: Optional[Path] = None):
@@ -44,7 +45,9 @@ class AreaGenerator(ContentGenerator):
         else:
             self.csv_handler.write_headers(self.areas_csv_path, self.config.csv_headers_area)
         
-        if self.past_areas_csv_path is not None and self.past_areas_csv_path.exists():
+        if self.past_areas_csv_path is None:
+            pass
+        elif self.past_areas_csv_path.exists():
             for row in self.csv_handler.read_rows(self.past_areas_csv_path):
                 area_data = self._row_to_areadata(row)
                 areas_data[area_data.name] = area_data
@@ -55,51 +58,56 @@ class AreaGenerator(ContentGenerator):
     def _row_to_areadata(self, row):
         return AreaData(
             name=row["エリア名"],
-            past_area_name=row["過去エリア"],
-            difficulty=row["難易度"].split(":")[0],
+            prev_area_name=row["前のエリア"],
+            next_area_name=row["次のエリア"],
+            difficulty=row["難易度"],
             geographic_features=row["地理的特徴"],
             history_legend=row["歴史や伝説"],
             risks_challenges=row["リスクや挑戦"],
-            treasure=row["財宝"].split(":")[0],
+            treasure=row["財宝"],
             treasure_location=row["財宝の隠し場所"],
-            items=row["採取できるアイテム"],
-            dangerous_creatures=row["生息する危険な生物"],
-            harmless_creatures=row["生息する無害な生物"],
-            waypoints=self._parse_semicolon_list(row["経由地候補"]),
-            cities=self._parse_semicolon_list(row["近くの街"]),
-            routes=self._parse_semicolon_list(row["移動路"]),
-            rest_points=self._parse_semicolon_list(row["休憩ポイント"])
+            items=row["採取できるアイテム"].split(";"),
+            dangerous_creatures=row["生息する危険な生物"].split(";"),
+            harmless_creatures=row["生息する無害な生物"].split(";"),
+            waypoints=row["経由地候補"].split(";"),
+            cities=row["近くの街"].split(";"),
+            routes=row["移動路"].split(";"),
+            rest_points=row["休憩ポイント"].split(";")
         )
 
     def _parse_semicolon_list(self, text: str) -> List[str]:
         return [item.split(":")[0].strip() for item in text.split(";") if ":" in item]
 
     @retry_on_failure()
-    def generate_new_area(self, reference_count: int = -1, area_name: Optional[str] = None, difficulty: int = 1) -> AreaData:
+    def generate_new_area(self, reference_count: int = -1, area_name: Optional[str] = None, difficulty: int = 1, debug: bool = False) -> AreaData:
         existing_areas = self._format_reference_areas(reference_count)
         response = self.generate(
             response_format=ResponseFormat.TEXT,
             existing_areas=existing_areas,
             area_name=area_name or self.config.area_name_prompt,
-            difficulty=difficulty
+            difficulty=difficulty,
+            debug=debug
         )
         content = self.extract_json(response)
-        content["過去エリア"] = "なし"
+        content["前のエリア"] = "なし"
+        content["次のエリア"] = "なし"
         self.validate_content(content, difficulty)
         return self.create_data(content)
 
     @retry_on_failure()
-    def generate_new_locked_area(self, past_area_name, reference_count: int = -1, area_name: Optional[str] = None, difficulty: int = 1) -> AreaData:
-        area_info = self._get_area_info(past_area_name)
+    def generate_new_locked_area(self, prev_area_name, reference_count: int = -1, area_name: Optional[str] = None, difficulty: int = 1, debug: bool = False) -> AreaData:
+        area_info = self._get_area_info(prev_area_name)
 
         area_info.difficulty = difficulty
         response = self.generate(
             response_format=ResponseFormat.TEXT,
             new_area_name=area_name or self.config.area_name_prompt,
+            debug=debug,
             **asdict(area_info)
         )
         content = self.extract_json(response)
-        content["過去エリア"] = past_area_name
+        content["前のエリア"] = prev_area_name
+        content["次のエリア"] = "なし"
         self.validate_content(content, difficulty)
         return self.create_data(content)
 
@@ -115,7 +123,10 @@ class AreaGenerator(ContentGenerator):
         elif count > len(self.areas):
             count = len(self.areas)
         for area in list(self.areas.values())[:count]:
-            formatted_areas.append(f"{area.name},{area.treasure},{';'.join(area.waypoints)},{';'.join(area.cities)}")
+            treasure = area.treasure.split(":")[0]
+            waypoints = [waypoint.split(":")[0] for waypoint in area.waypoints]
+            cities = [city.split(":")[0] for city in area.cities]
+            formatted_areas.append(f"{area.name},{treasure},{';'.join(waypoints)},{';'.join(cities)}")
         return "\n".join(formatted_areas)
 
     def validate_content(self, content: Dict, difficulty) -> None:
@@ -167,7 +178,8 @@ class AreaGenerator(ContentGenerator):
     def create_data(self, content: Dict) -> AreaData:
         return AreaData(
             name=content["エリア名"],
-            past_area_name=content.get("過去エリア", "なし"),
+            prev_area_name=content.get("前のエリア", "なし"),
+            next_area_name=content.get("次のエリア", "なし"),
             difficulty=f'{content["難易度"]}: {content["難易度設定の根拠"]}',
             geographic_features=content["地理的特徴"],
             history_legend=content["歴史や伝説"],
@@ -186,7 +198,8 @@ class AreaGenerator(ContentGenerator):
     def save(self, area_data: AreaData) -> None:
         row = [
             area_data.name,
-            area_data.past_area_name,
+            area_data.prev_area_name,
+            area_data.next_area_name,
             area_data.difficulty,
             area_data.geographic_features,
             area_data.history_legend,
@@ -202,3 +215,12 @@ class AreaGenerator(ContentGenerator):
             self._parse_listcontent(area_data.rest_points),
         ]
         self.csv_handler.write_row(self.areas_csv_path, row, headers=self.config.csv_headers_area)
+
+    def update(self, csv_path: str, area_name: str, next_area_name: str) -> None:
+        self.csv_handler.update_col2_if_col1_equals_value(
+            file_path=csv_path,
+            col1_name="エリア名",
+            col2_name="次のエリア",
+            target_value=area_name,
+            new_value=next_area_name
+        )

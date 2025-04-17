@@ -48,6 +48,10 @@ class ConfigManager:
         return self.config.get("ADVCHECK_KEYS", [])
 
     @property
+    def locked_adventure_check_keys(self) -> List[str]:
+        return self.config.get("LOCKED_ADVCHECK_KEYS", [])
+
+    @property
     def log_check_keys(self) -> List[str]:
         return self.config.get("LOGCHECK_KEYS", [])
 
@@ -79,6 +83,10 @@ class ConfigManager:
     @property
     def csv_headers_adventure(self) -> List[str]:
         return self.config.get("CSV_HEADERS_ADVENTURE", [])
+
+    @property
+    def csv_headers_unlocks(self) -> List[str]:
+        return self.config.get("CSV_HEADERS_UNLOCKS", [])
 
     @property
     def chapter_settings(self) -> List[Dict]:

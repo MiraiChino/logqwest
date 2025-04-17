@@ -55,17 +55,21 @@ class ContentChecker(ABC):
         return True
 
     def generate(self, response_format: Dict = ResponseFormat.TEXT, temperature: float = 0, 
-                max_tokens: int = 8192, **kwargs) -> Dict:
+                max_tokens: int = 8192, debug: bool = False, **kwargs) -> Dict:
         if not self.template:
             raise ValueError("Template not loaded")
             
         prompt = self.template.format(**kwargs)
+        if debug:
+            print(prompt)
         response = self.client.generate_response(
             prompt=prompt,
             temperature=temperature,
             max_tokens=max_tokens,
             response_format=response_format
         )
+        if debug:
+            print(response)
         # 生成時に渡された冒険名、エリア名があれば結果に含める
         result = self.extract_json(response)
         if "adventure_name" not in result and "adventure_name" in kwargs:

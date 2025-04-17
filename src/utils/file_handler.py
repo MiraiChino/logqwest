@@ -57,6 +57,24 @@ class FileHandler:
     def get_all_areas_check_path(self) -> List[Path]:
         return list(self.structure.check_result_dir.glob('lv*.csv'))
 
+    def get_previous_adventure_name(self, area_name: str, adventure_name: str) -> Optional[str]:
+        area_df = self.load_area_csv(area_name)
+        if area_df is not None and adventure_name in area_df["冒険名"].values:
+            return area_df[area_df["冒険名"] == adventure_name]["前の冒険"].values[0]
+        return None
+
+    def get_previous_area_name(self, area_name: str) -> Optional[str]:
+        area_df = self.load_areas_csv()
+        if area_df is not None and area_name in area_df["エリア名"].values:
+            return area_df[area_df["エリア名"] == area_name]["前のエリア"].values[0]
+        return None
+
+    def get_next_area_name(self, area_name: str) -> Optional[str]:
+        area_df = self.load_areas_csv()
+        if area_df is not None and area_name in area_df["エリア名"].values:
+            return area_df[area_df["エリア名"] == area_name]["次のエリア"].values[0]
+        return None
+
     def load_areas_csv(self) -> pd.DataFrame:
         areas_csv_paths = self.get_all_areas_csv_path()
         dfs = []
@@ -88,31 +106,41 @@ class FileHandler:
             return []
         return df["エリア名"].tolist() if "エリア名" in df.columns else []
 
-    def load_nopast_area_names(self) -> List[str]:
+    def load_prev_area_names(self) -> List[str]:
         df = self.load_areas_csv()
-        if df is None:
+        if df is not None:
+            # 値が "なし" でない行のみ抽出してリストに変換
+            return df.loc[df["前のエリア"] != "なし", "前のエリア"].tolist()
+        else:
             return []
-        if "エリア名" not in df.columns:
-            return []
-        if "過去エリア" not in df.columns:
-            return []
-        areas = df["エリア名"].tolist()
-        past_areas = df["過去エリア"].tolist()
-        return [area for area, past_area in zip(areas, past_areas) if past_area == "なし"]
+
+    def load_next_area_names(self, area_name: str) -> List[str]:
+        df = self.load_areas_csv()
+        return df[(df["エリア名"] == area_name) & (df["次のエリア"] != "なし")]["次のエリア"].tolist() if df is not None else []
+
+    def load_next_adventure_names(self, area_name: str, adventure_name: str) -> List[str]:
+        df = self.load_area_csv(area_name)
+        return df[(df["冒険名"] == adventure_name) & (df["次の冒険"] != "なし")]["次の冒険"].tolist() if df is not None else []
+
+    def load_noprev_area_names(self) -> List[str]:
+        df = self.load_areas_csv()
+        return df[df["前のエリア"] == "なし"]["エリア名"].tolist() if df is not None else []
+
+    def load_prevexist_area_names(self):
+        df = self.load_areas_csv()
+        return df[df["前のエリア"] != "なし"]["エリア名"].tolist() if df is not None else []
 
     def load_nonext_area_name_and_lv(self):
         df = self.load_areas_csv()
-        if df is None:
-            return []
-        if "エリア名" not in df.columns:
-            return []
-        if "過去エリア" not in df.columns:
-            return []
-        areas = df["エリア名"].tolist()
-        past_areas = df["過去エリア"].tolist()
-        nonext_area_name = [area_name for area_name in areas if area_name not in past_areas][0]
-        difficulty = int(df[df["エリア名"] == nonext_area_name]["難易度"][0].split(":")[0])
-        return nonext_area_name, difficulty
+        nonext_df = df[df["次のエリア"] == "なし"]
+        nonext_area_names = nonext_df["エリア名"].tolist()
+        if nonext_area_names:
+            nonext_area_name = nonext_area_names[0]
+            lvs = df[df["エリア名"] == nonext_area_name]["難易度"].to_list()
+            difficulty = int(lvs[0].split(":")[0])
+            return nonext_area_name, difficulty
+        else:
+            return None, None
 
     def load_check_csv(self, area_name: str, check_type: str) -> pd.DataFrame:
         check_csv_path = self.get_check_path(area_name, check_type)
@@ -142,6 +170,10 @@ class FileHandler:
                     if self.get_area_csv_path(area).exists():
                         valid_areas.append(area)
         return valid_areas
+
+    def load_undone_adventures(self, area_name: str):
+        df_area = self.load_area_csv(area_name)
+        return df_area[df_area["前の冒険"] == "なし"]["冒険名"].tolist() if df_area is not None else []
 
     def read_adventure_log(self, area_name: str, adventure_name: str) -> Optional[str]:
         return self.read_text(self.get_adventure_path(area_name, adventure_name))
@@ -198,15 +230,25 @@ class FileHandler:
         pth.rmdir()
 
     def _delete_areas(self, areas: List[str]) -> Iterator[str]:
+        # 次のエリアが存在する場合、再帰的に削除する
+        for area in areas:
+            next_areas = self.load_next_area_names(area)
+            if next_areas:
+                yield f"🔥 次のエリア: {next_areas}"
+                yield from self._delete_areas(next_areas)
         # Delete from areas CSV
-        areas_csv_path = self.get_all_areas_csv_path()
-        if areas_csv_path.exists():
-            df_areas = pd.read_csv(areas_csv_path)
-            df_areas = df_areas[~df_areas["エリア名"].isin(areas)]
-            df_areas.to_csv(areas_csv_path, index=False)
-            yield f"🔥 エリア一覧: {areas}"
+        areas_csv_paths = self.get_all_areas_csv_path()
+        for areas_csv_path in areas_csv_paths:
+            if areas_csv_path.exists():
+                df_areas = pd.read_csv(areas_csv_path)
+                df_areas = df_areas[~df_areas["エリア名"].isin(areas)]
+                df_areas.to_csv(areas_csv_path, index=False)
 
-        # Delete from areas check CSV
+                # 該当エリアが次のエリアとなっている場合、なしに戻す
+                for area in areas:
+                    df_areas.loc[df_areas['次のエリア'] == area, '次のエリア'] = 'なし'
+                df_areas.to_csv(areas_csv_path, index=False)
+                yield f"🔥 エリア一覧: {areas} in {areas_csv_path}"
         all_areas_check_csv_paths = self.get_all_areas_check_path()
         for areas_check_csv_path in all_areas_check_csv_paths:
             if areas_check_csv_path.exists():
@@ -216,7 +258,6 @@ class FileHandler:
                 df_all_areas_check = df_all_areas_check[~df_all_areas_check["エリア名"].str.contains(pattern, na=False)]
                 df_all_areas_check.to_csv(areas_check_csv_path, index=False)
                 yield f"🔥 エリアチェック: {areas} from {areas_check_csv_path}"
-
         # Delete from area CSV
         for area in areas:
             #  Delete adventures
@@ -235,13 +276,36 @@ class FileHandler:
             yield f"🔥 エリア: {area}"
 
     def _delete_adventures(self, area_name: str, adventures: List[str]) -> Iterator[str]:
+        prev_area_name = self.get_previous_area_name(area_name)
+        next_area_name = self.get_next_area_name(area_name)
+
+        # 次の冒険が存在する場合、再帰的に削除する
+        for adventure in adventures:
+            next_adventures = self.load_next_adventure_names(area_name, adventure)
+            if next_adventures:
+                yield f"🔥 次の冒険: {next_adventures} from {next_area_name}"
+                yield from self._delete_adventures(next_area_name, next_adventures)
+
         # Delete from area CSV
         area_csv_path = self.get_area_csv_path(area_name)
         if area_csv_path.exists():
             df_area = pd.read_csv(area_csv_path)
             df_area = df_area[~df_area["冒険名"].isin(adventures)]
             df_area.to_csv(area_csv_path, index=False)
-            yield f"🔥 冒険一覧: {adventures}"
+            yield f"🔥 冒険一覧: {adventures} from {area_name}"
+
+        # Delete from previous area CSV
+        if prev_area_name is not None:
+            prev_area_csv_path = self.get_area_csv_path(prev_area_name)
+            if prev_area_csv_path.exists():
+                df_prev_area = pd.read_csv(prev_area_csv_path)
+                # 該当の冒険が次の冒険となっている場合、なしに戻す
+                import pdb; pdb.set_trace()
+                for adventure in adventures:
+                    df_prev_area.loc[df_prev_area['次の冒険'] == adventure, '次の冒険'] = 'なし'
+                    df_prev_area.to_csv(area_csv_path, index=False)
+                df_prev_area.to_csv(area_csv_path, index=False)
+                yield f"🔥 冒険一覧: {adventures} from {prev_area_name}"
 
         # Delete from adventure check CSV
         check_adv_path = self.get_check_path(area_name, "adv")

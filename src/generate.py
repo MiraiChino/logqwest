@@ -32,8 +32,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
     adventures_parser = subparsers.add_parser("adventure")
     adventures_parser.add_argument("result", nargs="?")
+    locked_adventures_parser = subparsers.add_parser("locked_adventure")
+    locked_adventures_parser.add_argument("result", nargs="?")
     
     subparsers.add_parser("log")
+    subparsers.add_parser("locked_log")
     subparsers.add_parser("location")
     
     return parser
@@ -58,7 +61,9 @@ def main():
         "area": lambda: command_handler.execute_area_command(),
         "locked_area": lambda: command_handler.execute_locked_area_command(),
         "adventure": lambda: command_handler.execute_adventure_command(args.result),
+        "locked_adventure": lambda: command_handler.execute_locked_adventure_command(args.result),
         "log": command_handler.execute_log_command,
+        "locked_log": command_handler.execute_locked_log_command,
         "location": command_handler.execute_location_command
     }
 

@@ -19,6 +19,9 @@ class AreaDetailView(BaseView):
         total = len(df)
         completed = sum(1 for adv in df["冒険名"] 
                        if self.progress_tracker.is_adventure_complete(self.area_name, adv))
+        if total == 0:
+            st.warning("冒険データが存在しません。")
+            return
         self.render_progress_bar(
             completed / total,
             f"冒険データ存在数: {completed} / {total}"
@@ -29,7 +32,7 @@ class AreaDetailView(BaseView):
         if not area_df.empty:
             with st.expander("エリア情報", expanded=True):
                 clickable_area_df = self._make_areas_clickable(area_df)
-                self._display_dataframe(clickable_area_df)
+                self._display_dataframe(clickable_area_df, start_idx=3)
 
     def _render_adventures_by_result(self, df, area_name):
         for result in ["失敗", "成功", "大成功"]:
@@ -83,7 +86,7 @@ class AreaDetailView(BaseView):
                 adventure_summary_df = adventures_df[adventures_df["冒険名"] == adventure_name]
                 if not adventure_summary_df.empty:
                     clickable_adv_df = self._make_adventures_clickable(adventure_summary_df, area_name)
-                    self._display_dataframe_with_checkbox(adventure_summary_df, clickable_adv_df)
+                    self._display_dataframe_with_checkbox(adventure_summary_df, clickable_adv_df, start_idx=4)
 
                 # Check: 冒険サマリー
                 st.markdown("##### チェック: 冒険サマリー")

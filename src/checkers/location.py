@@ -4,7 +4,7 @@ from src.core.checker import ContentChecker
 
 class LocationChecker(ContentChecker):
 
-    def check_location(self, log_with_location: str, location_candidates: Dict, adventure_name: str) -> Dict:
+    def check_location(self, log_with_location: str, location_candidates: Dict, adventure_name: str, debug: bool = False) -> Dict:
         content = self.generate(
             log=log_with_location,
             area=location_candidates["area"],
@@ -12,7 +12,8 @@ class LocationChecker(ContentChecker):
             city=location_candidates["city"],
             route=location_candidates["route"],
             restpoint=location_candidates["restpoint"],
-            adventure_name=adventure_name
+            adventure_name=adventure_name,
+            debug=debug,
         )
         if self.validate_content(content):
             pass

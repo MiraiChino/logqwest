@@ -4,7 +4,8 @@ from src.generators.area import AreaData
 
 class AreaChecker(ContentChecker):
 
-    def check_area(self, area_data: AreaData, existing_df) -> Dict:
+    def check_area(self, area_data: AreaData, existing_df, exclude_area_names: List[str] = [], debug: bool = False) -> Dict:
+        existing_areas = [area for area in existing_df["エリア名"].tolist() if area not in exclude_area_names]
         content = self.generate(
             area_name=area_data.name,
             difficulty=area_data.difficulty,
@@ -20,11 +21,12 @@ class AreaChecker(ContentChecker):
             city=self._parse_dict_to_bullet_items(area_data.cities),
             route=self._parse_dict_to_bullet_items(area_data.routes),
             restpoint=self._parse_dict_to_bullet_items(area_data.rest_points),
-            existing_areas=self._parse_bullet_items(existing_df["エリア名"].tolist() if len(existing_df["エリア名"].to_list()) > 0 else ["既存のデータは未だありません"]),
+            existing_areas=self._parse_bullet_items(existing_areas if len(existing_areas) > 0 else ["既存のデータは未だありません"]),
             existing_treasures=self._parse_parsed_list_to_bullet_items(existing_df["財宝"].tolist()),
             existing_collectibles=self._parse_parsed_list_to_bullet_items(existing_df["採取できるアイテム"].tolist()),
             existing_harmless_creatures=self._parse_parsed_list_to_bullet_items(existing_df["生息する無害な生物"].tolist()),
             existing_dangerous_creatures=self._parse_parsed_list_to_bullet_items(existing_df["生息する危険な生物"].tolist()),
+            debug=debug
         )
         if self.validate_content(content):
             pass
@@ -66,7 +68,7 @@ class AreaChecker(ContentChecker):
         return [f"{c["名称"]}: {c["特徴"]}" for c in listcontent]
 
     def _parse_bullet_items(self, listcontent: List) -> str:
-        return '\n'.join(f"  * {c}" for c in listcontent)
+        return '\n'.join(f"    * {c}" for c in listcontent)
 
     def save(self, results: Dict, csv_path) -> None:
         if "area_name" not in results:

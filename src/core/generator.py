@@ -21,16 +21,20 @@ class ContentGenerator(ABC):
         return template_path.read_text(encoding="utf-8")
 
     def generate(self, response_format: Dict = ResponseFormat.TEXT, temperature: float = 1.5, 
-                max_tokens: int = 8192, **kwargs) -> Any:
+                max_tokens: int = 8192, debug: bool = False, **kwargs) -> Any:
         if not self.template:
             raise ValueError("Template not loaded")
         prompt = self.template.format(**kwargs)
+        if debug:
+            print(prompt)
         response = self.client.generate_response(
             prompt=prompt,
             temperature=temperature,
             max_tokens=max_tokens,
             response_format=response_format
         )
+        if debug:
+            print(response)
         return response
 
     def extract_json(self, response: str) -> str:

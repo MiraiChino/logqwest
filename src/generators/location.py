@@ -15,7 +15,7 @@ class LocationInfo:
     rest_points: List[str]
 
 class LocationGenerator(ContentGenerator):
-    def __init__(self, client, template_path: Path, areas_csv_paths: Path):
+    def __init__(self, client, template_path: Path, areas_csv_paths: List[Path]):
         super().__init__(client, template_path)
         self.csv_handler = CSVHandler()
         self.areas_csv_paths = areas_csv_paths
@@ -24,7 +24,7 @@ class LocationGenerator(ContentGenerator):
     def _load_area_locations(self) -> Dict[str, LocationInfo]:
         area_locations = {}
         for areas_csv_path in self.areas_csv_paths:
-            for row in self.csv_handler.read_rows(self.areas_csv_path):
+            for row in self.csv_handler.read_rows(areas_csv_path):
                 area_name = row["エリア名"]
                 area_locations[area_name] = LocationInfo(
                     area=f"  - {area_name}:{row['地理的特徴']}",
@@ -42,13 +42,14 @@ class LocationGenerator(ContentGenerator):
             if entry.strip()
         ]
 
-    def generate_location(self, area_name: str, log_content: str, location_candidates: Dict = None) -> str:
+    def generate_location(self, area_name: str, log_content: str, location_candidates: Dict = None, debug: bool = False) -> str:
         numbered_log_text, len_lines = self._format_log_content(log_content)
         if location_candidates is None:
             location_candidates = self.get_location_candidates(area_name)
         response = self.generate(
             response_format=ResponseFormat.JSON,
             log=numbered_log_text,
+            debug=debug,
             **location_candidates
         )
         content = self.extract_json(response)

@@ -10,31 +10,57 @@ class BaseView:
         df_clickable = df.copy()
         df_clickable["エリア名"] = df_clickable["エリア名"].apply(
             lambda area: f'<a href="?area={area}" target="_self">'
-                        f'{self._get_area_label(area)}</a>'
+                        f'{self._get_area_label(area)}{area}</a>'
         )
+        if "前のエリア" in df_clickable.columns:
+            df_clickable["前のエリア"] = df_clickable["前のエリア"].apply(
+                lambda area: f'<a href="?area={area}" target="_self">'
+                            f'{self._get_area_label(area)}{area}</a>' if area != "なし" else area
+            )
+        if "次のエリア" in df_clickable.columns:
+            df_clickable["次のエリア"] = df_clickable["次のエリア"].apply(
+                lambda area: f'<a href="?area={area}" target="_self">'
+                            f'{self._get_area_label(area)}{area}</a>' if area != "なし" else area
+            )
         return df_clickable
 
     def _make_adventures_clickable(self, df, area_name: str):
         df_clickable = df.copy()
         df_clickable["冒険名"] = df_clickable["冒険名"].apply(
             lambda adv: f'<a href="?area={area_name}&adv={adv}" target="_self">'
-                       f'{self._get_adventure_label(area_name, adv)}</a>'
+                       f'{self._get_adventure_label(area_name, adv)}{adv}</a>'
         )
+        if "前の冒険" in df_clickable.columns:
+            prev_adventure = df_clickable["前の冒険"].to_list()[0]
+            if prev_adventure != "なし":
+                prev_area_name = prev_adventure.split('_')[1]
+                df_clickable["前の冒険"] = df_clickable["前の冒険"].apply(
+                    lambda adv: f'<a href="?area={prev_area_name}&adv={adv}" target="_self">'
+                            f'{self._get_adventure_label(prev_area_name, adv)}{adv}</a>'
+                )
+        if "次の冒険" in df_clickable.columns:
+            prev_adventure = df_clickable["次の冒険"].to_list()[0]
+            if prev_adventure != "なし":
+                prev_area_name = prev_adventure.split('_')[1]
+                df_clickable["次の冒険"] = df_clickable["次の冒険"].apply(
+                    lambda adv: f'<a href="?area={prev_area_name}&adv={adv}" target="_self">'
+                            f'{self._get_adventure_label(prev_area_name, adv)}{adv}</a>'
+                )
         return df_clickable
 
     def _get_area_label(self, area: str) -> str:
         if self.progress_tracker.is_area_complete(area):
             if self.progress_tracker.is_area_all_checked(area):
-                return f"✅{area}"
-            return f"🚧{area}"
-        return area
+                return "✅"
+            return "🚧"
+        return ""
 
     def _get_adventure_label(self, area_name: str, adventure_name: str) -> str:
         if self.progress_tracker.is_adventure_complete(area_name, adventure_name):
             if self.progress_tracker.is_adventure_all_checked(area_name, adventure_name):
-                return f"✅{adventure_name}"
-            return f"🚧{adventure_name}"
-        return adventure_name
+                return "✅"
+            return "🚧"
+        return ""
     
     def format_cell_content(self, value):
         if isinstance(value, str):
