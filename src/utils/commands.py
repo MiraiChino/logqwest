@@ -56,7 +56,7 @@ class CommandHandler:
             else:
                 self.logger.warning(f"未完了: {area_name}")
                 if not self.context.debug_mode:
-                    self.logger.warning("未完了エリアがあるため終了します")
+                    self.logger.warning("エリア: 未完了エリアがあるため終了します")
                     return
         
         self._generate_and_check_area(area_generator, area_checker, difficulty)
@@ -75,7 +75,7 @@ class CommandHandler:
             else:
                 self.logger.warning(f"未完了: {area_name}")
                 if not self.context.debug_mode:
-                    self.logger.warning("未完了エリアがあるため終了します")
+                    self.logger.warning("未開放エリア: 未完了エリアがあるため終了します")
                     return
 
         # まだ次のエリアが生成されていないエリアを抽出
@@ -141,12 +141,14 @@ class CommandHandler:
             self.config
         )
 
-        for area_name in self.file_handler.load_prevexist_area_names():
-            if not self.progress_tracker.is_area_complete(area_name) or not self.progress_tracker.is_area_all_checked(area_name):
-                self.logger.warning(f"未完了: {area_name}")
+        for noprev_area_name in self.file_handler.load_noprev_area_names():
+            if not self.progress_tracker.is_area_complete(noprev_area_name) or not self.progress_tracker.is_area_all_checked(noprev_area_name):
+                self.logger.warning(f"未完了: {noprev_area_name}")
                 if not self.context.debug_mode:
-                    self.logger.warning("未完了エリアがあるため終了します")
+                    self.logger.warning("未開放冒険: 未完了エリアがあるため終了します")
                     return
+
+        for area_name in self.file_handler.load_prevexist_area_names():
             try:
                 debug_breaked = self._process_area_adventures(
                     adventure_generator,
@@ -326,6 +328,8 @@ class CommandHandler:
 
     def _get_area_adventures(self, area_name: str) -> List[Adventure]:
         area_csv = self.file_handler.get_area_csv_path(area_name)
+        if not area_csv.exists():
+            return []
     
         adventures = []
         try:

@@ -300,7 +300,6 @@ class FileHandler:
             if prev_area_csv_path.exists():
                 df_prev_area = pd.read_csv(prev_area_csv_path)
                 # 該当の冒険が次の冒険となっている場合、なしに戻す
-                import pdb; pdb.set_trace()
                 for adventure in adventures:
                     df_prev_area.loc[df_prev_area['次の冒険'] == adventure, '次の冒険'] = 'なし'
                     df_prev_area.to_csv(area_csv_path, index=False)

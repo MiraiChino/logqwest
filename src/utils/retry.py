@@ -23,8 +23,8 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
                         return response
                     error = "Received empty or invalid response"
 
-                except ValueError:
-                    error = traceback.format_exc()
+                except ValueError as e:
+                    error = e
 
                 except Exception as e:
                     if any(err in str(e) for err in ["429", "Rate limit", "RESOURCE_EXHAUSTED"]):
