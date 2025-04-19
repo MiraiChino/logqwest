@@ -27,16 +27,21 @@ class UIController:
     def load_areas_csv(_self):
         return _self.file_handler.load_areas_csv()
 
+    @st.cache_data(max_entries=10)
+    def load_all_lv_area_dict(_self):
+        return _self.file_handler.load_all_lv_area_dict()
+
     def run(self):
         self.initialize()
         areas_df = self.load_areas_csv()
+        all_lv_area_dict = self.load_all_lv_area_dict()
     
         if areas_df is None:
             st.error("エリア一覧データが見つかりません。")
             return
 
-        area_names = areas_df["エリア名"].tolist()
-        self.navigation.render(area_names)
+        lv_area_names = {lv: lv_df["エリア名"].to_list() for lv, lv_df in all_lv_area_dict.items()}
+        self.navigation.render(lv_area_names)
         self._render_view(st.query_params.get("area", "エリア一覧"), 
                         st.query_params.get("adv", None), 
                         areas_df)

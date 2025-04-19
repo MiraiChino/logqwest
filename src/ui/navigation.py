@@ -1,16 +1,16 @@
 import streamlit as st
-from typing import List
+from typing import List, Dict
 
 class SidebarNavigation:
     def __init__(self, file_handler, progress_tracker):
         self.file_handler = file_handler
         self.progress_tracker = progress_tracker
 
-    def render(self, area_names: List[str]):
+    def render(self, lv_area_names: Dict):
         with st.sidebar:
             self._render_refresh_button()
             self._render_area_list_link()
-            self._render_area_filter(area_names)
+            self._render_area_filter(lv_area_names)
 
     def _render_refresh_button(self):
         if st.button("🔄 データ更新"):
@@ -23,31 +23,35 @@ class SidebarNavigation:
             unsafe_allow_html=True
         )
 
-    def _render_area_filter(self, area_names: List[str]):
+    def _render_area_filter(self, lv_area_names: Dict):
         filter_keyword = st.text_input(
             "🔎 エリア名でフィルタ", "", 
             placeholder="エリア名で検索", 
             label_visibility="collapsed"
         )
         
-        filtered_areas = self._filter_areas(area_names, filter_keyword)
-        sorted_areas = sorted(filtered_areas)
+        filtered_areas = self._filter_areas(lv_area_names, filter_keyword)
+        
 
-        for area in sorted_areas:
-            label = self._generate_area_label(area)
-            if self.file_handler.area_exists(area):
-                st.caption(
-                    f'<a href="?area={area}" target="_self">{label}</a>',
-                    unsafe_allow_html=True
-                )
-            else:
-                st.caption(area)
+        for lv, area_names in filtered_areas.items():
+            with st.expander(lv, expanded=True):
+                for area in sorted(area_names):
+                    label = self._generate_area_label(area)
+                    if self.file_handler.area_exists(area):
+                        st.caption(
+                            f'<a href="?area={area}" target="_self">{label}</a>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.caption(area)
 
-    def _filter_areas(self, area_names: List[str], keyword: str) -> List[str]:
+    def _filter_areas(self, lv_area_names: Dict, keyword: str) -> Dict:
         if not keyword:
-            return area_names
-        return [area for area in area_names 
-                if keyword.lower() in area.lower()]
+            return lv_area_names
+        filtered_areas = {}
+        for lv, area_names in lv_area_names.items():
+            filtered_areas[lv] = [area for area in area_names if keyword.lower() in area.lower()]
+        return filtered_areas
 
     def _generate_area_label(self, area: str) -> str:
         if self.progress_tracker.is_area_complete(area):

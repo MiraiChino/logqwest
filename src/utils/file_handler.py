@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, List, Iterator
+from typing import Optional, List, Iterator, Dict
 from dataclasses import dataclass
 import json
 import csv
@@ -74,6 +74,15 @@ class FileHandler:
         if area_df is not None and area_name in area_df["エリア名"].values:
             return area_df[area_df["エリア名"] == area_name]["次のエリア"].values[0]
         return None
+
+    def load_all_lv_area_dict(self) -> Dict:
+        lv_areas_csv_paths = self.get_all_areas_csv_path()
+        lv_areas_data = {}
+        for lv_areas_csv_path in lv_areas_csv_paths:
+            stem = lv_areas_csv_path.stem
+            if lv_areas_csv_path.exists():
+                lv_areas_data[stem] = pd.read_csv(lv_areas_csv_path)
+        return lv_areas_data
 
     def load_areas_csv(self) -> pd.DataFrame:
         areas_csv_paths = self.get_all_areas_csv_path()
