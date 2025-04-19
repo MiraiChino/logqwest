@@ -81,7 +81,7 @@ class CommandHandler:
         # まだ次のエリアが生成されていないエリアを抽出
         nonext_area_name, lv = self.file_handler.load_nonext_area_name_and_lv()
         if nonext_area_name is None:
-            self.logger.warning("次のエリアがすべて生成されているため終了します")
+            self.logger.warning("未開放エリア:次のエリアがすべて生成されているため終了します")
             return
 
         area_generator = AreaGenerator(
@@ -460,6 +460,7 @@ class CommandHandler:
             check_result = checker.check_adventure(
                 area=','.join([area_data["エリア名"]] + list(area_data.values())[4:]),
                 result=adventure.result,
+                result_desc=generator.config.result_template[adventure.result],
                 summary=','.join(adventure.chapters),
                 adventure_name=adventure_name,
                 debug=self.context.debug_mode

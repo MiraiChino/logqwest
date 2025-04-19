@@ -28,30 +28,46 @@ class FileHandler:
         return list(self.structure.data_dir.rglob('lv*.csv'))
 
     def get_lv_areas_csv_path(self, lv: int) -> Path:
+        if not lv:
+            return Path("none")
         return self.structure.data_dir / f"lv{lv}.csv"
 
     def get_lv_check_areas_csv_path(self, lv: int) -> Path:
+        if not lv:
+            return Path("none")
         return self.structure.check_result_dir / f"lv{lv}.csv"
 
     def get_areas_dir(self) -> Path:
         return self.structure.data_dir
 
     def get_area_path(self, area_name: str) -> Path:
+        if not area_name:
+            return Path("none")
         return self.structure.data_dir / area_name
 
     def get_area_csv_path(self, area_name: str) -> Path:
+        if not area_name:
+            return Path("none")
         return self.get_area_path(area_name) / f"{area_name}.csv"
 
     def get_adventure_path(self, area_name: str, adventure_name: str) -> Path:
+        if not area_name or not adventure_name:
+            return Path("none")
         return self.get_area_path(area_name) / f"{adventure_name}.txt"
 
     def get_location_path(self, area_name: str, adventure_name: str) -> Path:
+        if not area_name or not adventure_name:
+            return Path("none")
         return self.get_area_path(area_name) / f"loc_{adventure_name}.txt"
 
     def get_check_area_path(self, area_name: str) -> Path:
+        if not area_name:
+            return Path("none")
         return self.structure.check_result_dir / area_name
 
     def get_check_path(self, area_name: str, check_type: str) -> Path:
+        if not area_name:
+            return Path("none")
         return self.structure.check_result_dir / area_name / f"{check_type}_{area_name}.csv"
 
     def get_all_areas_check_path(self) -> List[Path]:
@@ -98,6 +114,8 @@ class FileHandler:
         return combined_df
 
     def load_area_csv(self, area_name: str) -> pd.DataFrame:
+        if area_name is None:
+            return None
         area_csv_path = self.get_area_csv_path(area_name)
         return pd.read_csv(area_csv_path) if area_csv_path.exists() else None
 
