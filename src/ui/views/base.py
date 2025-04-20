@@ -64,7 +64,7 @@ class BaseView:
             return "🚧"
         return ""
     
-    def format_cell_content(self, value):
+    def render_format_cell_content(self, value):
         if isinstance(value, str):
             if ';' in value:
                 formatted_text = ""
@@ -167,7 +167,7 @@ class BaseView:
                                 st.markdown(f"**{k}**:")
                                 st.html(v)
                         else:
-                            st.html(group_content)
+                            self.render_format_cell_content(group_content)
                     row_col_idx += 1
             else:
                 for i in range(len(row)):
@@ -175,7 +175,7 @@ class BaseView:
                         if i < start_content_col_idx:
                             st.html(row.iloc[i])
                         else:
-                            self.format_cell_content(row.iloc[i])
+                            self.render_format_cell_content(row.iloc[i])
                         row_col_idx += 1
 
         return df.loc[selected_indices] if display_checkbox and selected_indices else pd.DataFrame()
