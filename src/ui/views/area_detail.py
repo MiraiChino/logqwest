@@ -11,8 +11,6 @@ class AreaDetailView(BaseView):
         if adventures_df is not None:
             self._render_progress(adventures_df)
             self._render_area_info(areas_df, area_name)
-            # self._render_adventures_by_result(adventures_df, area_name)
-            # self._render_check_sections(area_name, len(adventures_df))
             self._render_adventures_grouped_by_name(area_name, adventures_df)
 
     def _render_progress(self, df):
@@ -32,7 +30,8 @@ class AreaDetailView(BaseView):
         if not area_df.empty:
             with st.expander("エリア情報", expanded=True):
                 clickable_area_df = self._make_areas_clickable(area_df)
-                self._display_dataframe(clickable_area_df, start_idx=3)
+                clickable_area_df = self.make_groups(clickable_area_df, "エリア", ["エリア名", "次のエリア", "前のエリア"])
+                self._display_dataframe_grouped(clickable_area_df, start_idx=1)
 
     def _render_adventures_by_result(self, df, area_name):
         for result in ["失敗", "成功", "大成功"]:
@@ -56,6 +55,7 @@ class AreaDetailView(BaseView):
             with st.expander(f"チェック: 冒険サマリー({len(check_df)}/{total})"):
                 clickable_df = self._make_adventures_clickable(check_df, area_name)
                 selected_df = self._display_dataframe_with_checkbox_grouped(check_df, clickable_df)
+                
                 self._handle_deletion(selected_df, area_name, "adventures")
 
     def _render_check_log_section(self, area_name: str, total: int):
@@ -86,7 +86,8 @@ class AreaDetailView(BaseView):
                 adventure_summary_df = adventures_df[adventures_df["冒険名"] == adventure_name]
                 if not adventure_summary_df.empty:
                     clickable_adv_df = self._make_adventures_clickable(adventure_summary_df, area_name)
-                    self._display_dataframe_with_checkbox(adventure_summary_df, clickable_adv_df, start_idx=4)
+                    clickable_adv_df = self.make_groups(clickable_adv_df, "冒険", ["冒険名", "次の冒険", "前の冒険"])
+                    self._display_dataframe_grouped(clickable_adv_df, start_idx=1)
 
                 # Check: 冒険サマリー
                 st.markdown("##### チェック: 冒険サマリー")

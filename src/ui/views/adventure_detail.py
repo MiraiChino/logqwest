@@ -7,7 +7,7 @@ class AdventureDetailView(BaseView):
         st.title(f"{area_name} - {adventure_name} 詳細")
 
         adventures_df = self.load_area_csv(area_name)
-        is_rendered_adv = self._render_row(adventures_df, adventure_name, "冒険サマリー")
+        is_rendered_adv = self._render_row(adventures_df, adventure_name, "冒険サマリー", area_name)
 
         log_check_df = self.load_check_csv(area_name, "log")
         is_rendered_logcheck = self._render_row(log_check_df, adventure_name, "ログチェック")
@@ -24,12 +24,17 @@ class AdventureDetailView(BaseView):
             st.query_params.update({"area": area_name, "adv": ""})
             st.rerun()
 
-    def _render_row(self, df, adventure_name: str, info_title: str) -> bool:
+    def _render_row(self, df, adventure_name: str, info_title: str, area_name: str = None) -> bool:
         if df is not None:
             adventure_row = df[df["冒険名"] == adventure_name]
             if not adventure_row.empty:
                 st.markdown(f"**{info_title}**")
-                self._display_dataframe(adventure_row)
+                if area_name:
+                    clickable_adv_row = self._make_adventures_clickable(adventure_row, area_name)
+                    clickable_adv_row = self.make_groups(clickable_adv_row, "冒険", ["冒険名", "次の冒険", "前の冒険"])
+                    self._display_dataframe_grouped(clickable_adv_row, start_idx=1)
+                else:
+                    self._display_dataframe(adventure_row)
                 return True
             else:
                 st.warning(f"{adventure_name}の{info_title}は見つかりません。")

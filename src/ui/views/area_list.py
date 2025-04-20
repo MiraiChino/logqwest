@@ -37,7 +37,8 @@ class AreaListView(BaseView):
 
     def _render_area_table(self, df: pd.DataFrame) -> str:
         df_clickable = self._make_areas_clickable(df)
-        self._display_dataframe(df_clickable, start_idx=3)
+        df_clickable = self.make_groups(df_clickable, "エリア", ["エリア名", "次のエリア", "前のエリア"])
+        self._display_dataframe_grouped(df_clickable, start_idx=1)
 
     def _render_check_area_section(self, total: int):
         check_df = self.load_all_areas_check_csv()

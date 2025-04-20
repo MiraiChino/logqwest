@@ -8,10 +8,11 @@ class BaseView:
 
     def _make_areas_clickable(self, df):
         df_clickable = df.copy()
-        df_clickable["エリア名"] = df_clickable["エリア名"].apply(
-            lambda area: f'<a href="?area={area}" target="_self">'
-                        f'{self._get_area_label(area)}{area}</a>'
-        )
+        if "エリア名" in df_clickable.columns:
+            df_clickable["エリア名"] = df_clickable["エリア名"].apply(
+                lambda area: f'<a href="?area={area}" target="_self">'
+                            f'{self._get_area_label(area)}{area}</a>'
+            )
         if "前のエリア" in df_clickable.columns:
             df_clickable["前のエリア"] = df_clickable["前のエリア"].apply(
                 lambda area: f'<a href="?area={area}" target="_self">'
@@ -26,10 +27,11 @@ class BaseView:
 
     def _make_adventures_clickable(self, df, area_name: str):
         df_clickable = df.copy()
-        df_clickable["冒険名"] = df_clickable["冒険名"].apply(
-            lambda adv: f'<a href="?area={area_name}&adv={adv}" target="_self">'
-                       f'{self._get_adventure_label(area_name, adv)}{adv}</a>'
-        )
+        if "冒険名" in df_clickable.columns:
+            df_clickable["冒険名"] = df_clickable["冒険名"].apply(
+                lambda adv: f'<a href="?area={area_name}&adv={adv}" target="_self">'
+                        f'{self._get_adventure_label(area_name, adv)}{adv}</a>'
+            )
         if "前の冒険" in df_clickable.columns:
             prev_adventure = df_clickable["前の冒険"].to_list()[0]
             if prev_adventure != "なし":
@@ -111,7 +113,6 @@ class BaseView:
                 with header_cols[col_idx]:
                     st.write(f"**{header}**")
                 col_idx += 1
-
         else:
             header_columns_config += [1] * len(df.columns)
             header_cols = st.columns(header_columns_config)
@@ -163,7 +164,8 @@ class BaseView:
                     with row_cols[row_col_idx]:
                         if isinstance(group_content, dict):
                             for k, v in group_content.items():
-                                st.markdown(f"**{k}**: {v}")
+                                st.markdown(f"**{k}**:")
+                                st.html(v)
                         else:
                             st.html(group_content)
                     row_col_idx += 1
@@ -186,6 +188,19 @@ class BaseView:
 
     def _display_dataframe(self, df: pd.DataFrame, start_idx: int = 1):
         return self.display_dataframe(df, display_checkbox=False, group_columns=False, start_content_col_idx=start_idx)
+
+    def _display_dataframe_grouped(self, df: pd.DataFrame, start_idx: int = 1):
+        return self.display_dataframe(df, display_checkbox=False, group_columns=True, start_content_col_idx=start_idx)
+
+    def make_groups(self, df: pd.DataFrame, title: str, columns):
+        new_cols = []
+        for column in columns:
+            new_col = f"{title} - {column}"
+            df[new_col] = df[column]
+            new_cols.append(new_col)
+        df = df.drop(columns=columns)
+        df = df[new_cols + [col for col in df.columns if col not in new_cols]]
+        return df
 
     def _handle_deletion(self, selected_df, area_name: str, delete_type: str):
         if selected_df.empty:
