@@ -31,10 +31,10 @@ class SidebarNavigation:
         )
         
         filtered_areas = self._filter_areas(lv_area_names, filter_keyword)
-        
 
         for lv, area_names in filtered_areas.items():
-            with st.expander(lv, expanded=True):
+            completed_areas = [area for area in area_names if self.progress_tracker.is_area_complete(area) and self.progress_tracker.is_area_all_checked(area)]
+            with st.expander(f"{lv} ({len(completed_areas)}/{len(area_names)})", expanded=True):
                 for area in sorted(area_names):
                     label = self._generate_area_label(area)
                     if self.file_handler.area_exists(area):

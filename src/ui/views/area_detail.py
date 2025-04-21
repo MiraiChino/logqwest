@@ -113,5 +113,5 @@ class AreaDetailView(BaseView):
                     adventure_check_loc_df = check_loc_df[check_loc_df["冒険名"] == adventure_name]
                     if not adventure_check_loc_df.empty:
                         clickable_loc_df = self._make_adventures_clickable(adventure_check_loc_df, area_name)
-                        selected_loc_df = self._display_dataframe_with_checkbox_grouped(adventure_check_loc_df, clickable_loc_df)
+                        selected_loc_df = self._display_dataframe_with_checkbox(adventure_check_loc_df, clickable_loc_df)
                         self._handle_deletion(selected_loc_df, area_name, "locations")

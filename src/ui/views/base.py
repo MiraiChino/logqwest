@@ -78,7 +78,7 @@ class BaseView:
             elif ':' in value:
                 key, val = value.split(':', 1)
                 return st.markdown(f"**{key}**: {val}")
-        return st.write(value)
+        return st.html(value)
 
     def display_dataframe(self, df: pd.DataFrame,
                         df_clickable: pd.DataFrame = None,
