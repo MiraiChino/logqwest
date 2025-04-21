@@ -104,8 +104,8 @@ class AdventureGenerator(ContentGenerator):
         return '\n'.join(impact_to_str(impact) for impact in impacts)
 
     def _parse_nested_bullet_items(self, name:str, listcontent: List[str]) -> str:
-        result = f"      * {name}\n"
-        result += '\n'.join(f"         * {c}" for c in listcontent)
+        result = f"    * {name}\n"
+        result += '\n'.join(f"      * {c}" for c in listcontent)
         return result
 
     def _parse_listcontent(self, listcontent: List):
