@@ -263,6 +263,12 @@ class FileHandler:
             if next_areas:
                 yield f"🔥 次のエリア: {next_areas}"
                 yield from self._delete_areas(next_areas)
+
+        # Delete adventures
+        for area in areas:
+            adventures = self.load_area_adventures(area)
+            yield from self._delete_adventures(area, adventures)
+
         # Delete from areas CSV
         areas_csv_paths = self.get_all_areas_csv_path()
         for areas_csv_path in areas_csv_paths:
@@ -287,10 +293,6 @@ class FileHandler:
                 yield f"🔥 エリアチェック: {areas} from {areas_check_csv_path}"
         # Delete from area CSV
         for area in areas:
-            #  Delete adventures
-            adventures = self.load_area_adventures(area)
-            yield from self._delete_adventures(area, adventures)
-
             area_csv_path = self.get_area_csv_path(area)
             area_path = self.get_area_path(area)
             check_area_path = self.get_check_area_path(area)
@@ -302,7 +304,7 @@ class FileHandler:
                 self.delete_folder(check_area_path)
             yield f"🔥 エリア: {area}"
 
-    def _delete_adventures(self, area_name: str, adventures: List[str]) -> Iterator[str]:
+    def _delete_adventures(self, area_name: str, adventures: List[str], prev_area_name: str = None, next_area_name: str = None) -> Iterator[str]:
         prev_area_name = self.get_previous_area_name(area_name)
         next_area_name = self.get_next_area_name(area_name)
 
@@ -329,8 +331,7 @@ class FileHandler:
                 # 該当の冒険が次の冒険となっている場合、なしに戻す
                 for adventure in adventures:
                     df_prev_area.loc[df_prev_area['次の冒険'] == adventure, '次の冒険'] = 'なし'
-                    df_prev_area.to_csv(area_csv_path, index=False)
-                df_prev_area.to_csv(area_csv_path, index=False)
+                df_prev_area.to_csv(prev_area_csv_path, index=False)
                 yield f"🔥 冒険一覧: {adventures} from {prev_area_name}"
 
         # Delete from adventure check CSV

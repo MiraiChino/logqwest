@@ -150,7 +150,7 @@ class AreaGenerator(ContentGenerator):
 
             # エリア名のバリデーション
             areaname = content["エリア名"]
-            for invalid_char in {'~', '〜', '〰', '|', '[', ']', '「', '」', '『', '』', ':', ';', '@', '/', '>'}:
+            for invalid_char in {'~', '〜', '〰', '|', '[', ']', '「', '」', '『', '』', ':', ';', '@', '/', '>', ' ', '　', '・', '･'}:
                 if invalid_char in areaname:
                     raise ValueError(f"エリア名に禁止文字{invalid_char}が含まれています: {areaname}")
 

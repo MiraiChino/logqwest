@@ -252,7 +252,7 @@ class CommandHandler:
             for adventure_type in self._filter_adventure_types(result_filter):
                 for num in adventure_type["nums"]:
                     adventure_name = f"{adventure_type['result']}{num}_{area_name}"
-                    if adventure_name not in existing_adventures:
+                    if adventure_name not in existing_adventures and 0 < len(prev_nonext_adventures):
                         prev_adventure_name = random.choice(prev_nonext_adventures) if prev_area_name != "なし" else None
                         debug_breaked = self._generate_and_check_adventure(
                             generator, checker, area_name, area_data, adventure_name, 
