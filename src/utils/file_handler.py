@@ -198,9 +198,9 @@ class FileHandler:
                         valid_areas.append(area)
         return valid_areas
 
-    def load_undone_adventures(self, area_name: str):
+    def load_nonext_adventures(self, area_name: str):
         df_area = self.load_area_csv(area_name)
-        return df_area[df_area["前の冒険"] == "なし"]["冒険名"].tolist() if df_area is not None else []
+        return df_area[df_area["次の冒険"] == "なし"]["冒険名"].tolist() if df_area is not None else []
 
     def read_adventure_log(self, area_name: str, adventure_name: str) -> Optional[str]:
         return self.read_text(self.get_adventure_path(area_name, adventure_name))

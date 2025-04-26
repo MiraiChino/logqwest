@@ -246,14 +246,14 @@ class CommandHandler:
         try:
             area_data = self._load_area_data(area_name)
             prev_area_name = area_data.get("前のエリア", "なし")
-            prev_undone_adventures = self.file_handler.load_undone_adventures(prev_area_name)
+            prev_nonext_adventures = self.file_handler.load_nonext_adventures(prev_area_name)
             
             existing_adventures = self._get_existing_adventures(area_name)
             for adventure_type in self._filter_adventure_types(result_filter):
                 for num in adventure_type["nums"]:
                     adventure_name = f"{adventure_type['result']}{num}_{area_name}"
                     if adventure_name not in existing_adventures:
-                        prev_adventure_name = random.choice(prev_undone_adventures) if prev_area_name != "なし" else None
+                        prev_adventure_name = random.choice(prev_nonext_adventures) if prev_area_name != "なし" else None
                         debug_breaked = self._generate_and_check_adventure(
                             generator, checker, area_name, area_data, adventure_name, 
                             adventure_type["result"], extractor, prev_adventure_name, prev_area_name
