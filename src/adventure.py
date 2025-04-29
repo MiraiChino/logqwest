@@ -1,4 +1,3 @@
-import csv
 import time
 import traceback
 import random
@@ -19,62 +18,69 @@ file_handler = FileHandler(file_structure)
 
 ADVENTURE_COST = 100
 DEBUG_MODE = True
-# DEBUG時にエリアを強制指定する場合は値を設定（例："静寂の草原"）、通常はNone
-DEBUG_OVERRIDE_AREA = None
 DEFAULT_NAME = "アーサー"
+INTERVAL_MINUTES = 5
+LONG_INTERVAL_MINUTES = 60
 
-
-
-def select_outcome(outcomes: dict) -> str:
+def select_result(results: dict) -> str:
     """指定された確率情報に基づき、結果（キー）をランダムに選択する。"""
-    outcome_names = list(outcomes.keys())
-    weights = [info["chance"] for info in outcomes.values()]
-    return random.choices(outcome_names, weights=weights, k=1)[0]
+    result_names = list(results.keys())
+    weights = [info["chance"] for info in results.values()]
+    return random.choices(result_names, weights=weights, k=1)[0]
 
-
-def load_scenario_mappings(area: str) -> dict:
-    """
-    指定エリアのCSVからシナリオのマッピングを読み込み、
-    結果毎にファイル名のリストを返す。
-    """
-    csv_path =  file_handler.get_area_csv_path(area)
-    mappings = {"大成功": [], "成功": [], "失敗": []}
-    with csv_path.open("r", encoding="utf-8") as f:
-        for row in csv.reader(f):
-            if len(row) >= 2:
-                filename = row[0].strip()
-                result = row[1].strip()
-                if result in mappings:
-                    mappings[result].append(filename)
-    return mappings
-
-
-def select_unused_adventure(filenames: list[str], adventure_history: list) -> str:
-    """
-    使用回数が最も少ない冒険ファイルからランダムに選択する。
-    adventure_history をもとにファイルごとの使用回数を集計し、
-    """
-    filename_counts = {}
-    for entry in adventure_history:
-        filename = entry["filename"]
-        filename_counts[filename] = filename_counts.get(filename, 0) + 1
-
-    def get_count(fn: str) -> int:
-        return filename_counts.get(fn, 0)
-
-    min_count = min((get_count(fn) for fn in filenames), default=0) # ファイルが一度も使われていない場合は 0
-    candidates = [fn for fn in filenames if get_count(fn) == min_count]
-    return random.choice(candidates)
-
-
-def select_adventurer_name(names_file: Path) -> str:
+def select_adventurer_name(names_file: Path, adventure_history: list) -> str:
     """
     names.txtから冒険者の名前一覧を読み込み、ランダムに1つ返す。
     """
+    # 過去成功していたら、その冒険者名を返す
+    if adventure_history:
+        prev_adv_name = adventure_history[0]["adventure"]
+        result = file_handler.get_result(prev_adv_name)
+        if result == "成功" or result == "大成功":
+            return adventure_history[0]["adventurer"]
+    # それ以外の場合は、ランダムに選ぶ
     with names_file.open("r", encoding="utf-8") as f:
         names = [line.strip() for line in f if line.strip()]
+    prev_names = [h["adventurer"] for h in adventure_history if h and "adventurer" in h]
+    names = [name for name in names if name not in prev_names]
     return random.choice(names) if names else DEFAULT_NAME
 
+def get_adv_candidates(adventure_history: list, result: str) -> dict:
+    prev_adv_and_precursor = {h["adventure"]: h["adventurer"] for h in adventure_history if h and "adventure" in h}
+    adv_candidates = {}
+    for area_name in file_handler.load_valid_areas():
+        for adventure_name, r, prev_adventure_name in file_handler.load_area_adventures_with_result_and_prevadv(area_name):
+            if r == result:
+                # 履歴を考慮して、開放された冒険を含めて候補とする
+                if prev_adventure_name == "なし" or prev_adventure_name in prev_adv_and_precursor.keys():
+                    adv_candidates[adventure_name] = {
+                        "count": 0,
+                        "prev_adventure": prev_adventure_name,
+                        "precursor": prev_adv_and_precursor.get(prev_adventure_name, None)
+                    }
+    return adv_candidates
+
+def select_adventure(adventure_history: list, selected_result: str) -> str:
+    """
+    有効なエリアのリストを返す。lv1の有効エリア+履歴から次のエリアも含める。
+    """
+    adv_candidates = get_adv_candidates(adventure_history, selected_result)
+    if len(adv_candidates) == 0:
+        return None, None, None
+
+    # 過去の履歴に入っているものをカウント
+    for adv in adventure_history:
+        adv_name = adv["adventure"]
+        if adv_name in adv_candidates.keys():
+            adv_candidates[adv_name]["count"] += 1
+
+    # 使用回数が最も少ないものを選択
+    min_count = min((v["count"] for v in adv_candidates.values()), default=0) # 一度も使われていない場合は 0
+    min_adventures = [adv for adv, v in adv_candidates.items() if v["count"] == min_count]
+    selected_adventure = random.choice(min_adventures)
+    precursor = adv_candidates[selected_adventure]["precursor"]
+    prev_adventure = adv_candidates[selected_adventure]["prev_adventure"]
+    return selected_adventure, precursor, prev_adventure, min_count
 
 def run_adventure_streaming():
     """
@@ -85,32 +91,27 @@ def run_adventure_streaming():
       - "summary": 最終結果のサマリ
       - "error": エラー発生時のメッセージ
     """
-    outcomes = {
+    results = {
         "大成功": {"chance": 5, "prize": 1000},
         "成功": {"chance": 45, "prize": 110},
         "失敗": {"chance": 50, "prize": 0}
     }
     usage_data = file_handler.load_usage_data()
     adventure_history = usage_data.get("adventure_history", []) # 冒険履歴をロード
-    valid_areas = file_handler.load_valid_areas()
-    if not valid_areas:
-        yield {"type": "error", "error": "有効なエリアがありません"}
+    selected_result = select_result(results)
+    prize = results[selected_result]["prize"]
+
+    selected_adventure, precursor, prev_adventure, count = select_adventure(adventure_history, selected_result)
+
+    if not selected_adventure:
+        yield {"type": "error", "error": "有効な冒険がありません"}
         return
 
-    selected_outcome = select_outcome(outcomes)
-    prize = outcomes[selected_outcome]["prize"]
-
-    selected_area = random.choice(valid_areas)
-    if DEBUG_OVERRIDE_AREA:
-        selected_area = DEBUG_OVERRIDE_AREA
-
-    scenario_mappings = load_scenario_mappings(selected_area)
-    target_files = scenario_mappings.get(selected_outcome, [])
-    if not target_files:
-        yield {"type": "error", "error": f"{selected_area}に{selected_outcome}用のシナリオがありません"}
+    selected_area = file_handler.get_area_name(selected_adventure)
+    if not selected_area:
+        yield {"type": "error", "error": f"エリアが見つかりません: {selected_adventure}"}
         return
 
-    selected_adventure = select_unused_adventure(target_files, adventure_history) # 冒険履歴を渡す
     adventure_file = file_handler.get_adventure_path(selected_area, selected_adventure)
     location_file = file_handler.get_location_path(selected_area, selected_adventure)
     if not adventure_file.exists():
@@ -121,7 +122,7 @@ def run_adventure_streaming():
         return
 
     names_file = file_structure.data_dir / "names.txt"
-    adventurer_name = select_adventurer_name(names_file)
+    adventurer_name = select_adventurer_name(names_file, adventure_history)
 
     # 雇用メッセージを追加
     yield {
@@ -143,37 +144,67 @@ def run_adventure_streaming():
         adventure_lines = adventure_log_content.splitlines()
         location_lines = location_log_content.splitlines()
 
-        for line_adv, line_loc in zip(adventure_lines, location_lines): # adventure_fileとlocation_fileの内容を同時に読み込む
-            time_increment = timedelta(minutes=2.5)
-            if DEBUG_MODE:
-                current_time += time_increment
-            else:
-                current_time = datetime.now()
-            total_time += time_increment
+        last_location = None
+        time_increment = timedelta(minutes=INTERVAL_MINUTES)
+        long_time_increment = timedelta(minutes=LONG_INTERVAL_MINUTES)
+        for i, (line_adv, line_loc) in enumerate(zip(adventure_lines, location_lines)):
 
-            time_str = current_time.strftime('%H:%M') if current_time else datetime.now().strftime('%H:%M')
-            line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name))
-            location_text = line_loc.strip().format_map(defaultdict(str, name=adventurer_name))
-            # 各イベントで時刻、テキスト、ロケーションを yield する
-            yield {"type": "message", "time": time_str, "text": line_text, "location": location_text}
+            # 1. 前回のイベントからの経過時間を決定
+            increment_this_step = timedelta(0) # 最初のイベントは経過時間なし
+            is_location_change = False
+            if i > 0: # 2番目以降のイベントの場合
+                is_location_change = (line_loc != last_location)
+                # 場所が変わったら長いインターバル、そうでなければ通常のインターバル
+                increment_this_step = long_time_increment if is_location_change else time_increment
 
-            if DEBUG_MODE:
-                time.sleep(time_increment.total_seconds() / 3600)
-            else:
-                time.sleep(time_increment.total_seconds())
+            # 2. 時間を経過させる (sleep と時間の更新)
+            if increment_this_step > timedelta(0):
+                sleep_seconds = increment_this_step.total_seconds()
+                actual_sleep_duration = sleep_seconds / 3600
+                # print(f"デバッグ: Step {i}, 場所変更: {is_location_change}, 増加時間: {increment_this_step}, sleep: {actual_sleep_duration:.2f}秒") # 必要ならコメント解除
+
+                if actual_sleep_duration > 0:
+                    time.sleep(actual_sleep_duration)
+
+                # 時間カウンターを更新
+                total_time += increment_this_step # シミュレーション時間を加算
+                if DEBUG_MODE:
+                    current_time += increment_this_step # デバッグ時はシミュレーション時刻を進める
+                else:
+                    # 通常モードではsleep後の実時間を反映
+                    current_time = datetime.now()
+
+            # 3. 現在のイベント情報をフォーマット
+            time_str = current_time.strftime('%H:%M')
+            location_text = line_loc.strip().format_map(defaultdict(str, name=adventurer_name, precursor=precursor))
+            line_text = line_adv.strip().format_map(defaultdict(str, name=adventurer_name, precursor=precursor))
+
+            # 4. イベントデータを yield する
+            yield {
+                "type": "message",
+                "time": time_str,
+                "text": line_text,
+                "location": location_text
+            }
+
+            # 5. 次のループのために現在の場所を保存
+            last_location = line_loc
     except Exception as e: # location_fileのopenに失敗した場合、エラーメッセージをyield
         print(traceback.format_exc())
-        yield {"type": "error", "error": f"locationファイルの読み込みエラー: {e}"}
+        yield {"type": "error", "error": f"locationファイルの読み込みエラー: {e}、{adventure_file}の読み込みに失敗しました"}
         return
 
     # 履歴の追加
     adventure_entry = {
         "timestamp": start_time,
-        "area": selected_area,
-        "outcome": selected_outcome,
-        "prize": prize,
         "adventurer": adventurer_name,
-        "filename": selected_adventure
+        "area": selected_area,
+        "adventure": selected_adventure,
+        "result": selected_result,
+        "prize": prize,
+        "count": count,
+        "prev_adventure": prev_adventure,
+        "precursor": precursor
     }
     current_usage_data = file_handler.load_usage_data() # usage_dataをロード
     current_usage_data["adventure_history"].append(adventure_entry)
@@ -182,7 +213,7 @@ def run_adventure_streaming():
     hours, remainder = divmod(total_time.total_seconds(), 3600)
     minutes = remainder // 60
     summary_text = (
-        f"- 結果: `{selected_outcome}`\n"
+        f"- 結果: `{selected_result}`\n"
         f"- 獲得金額: `{prize}円`\n"
         f"- エリア: `{selected_area}`\n"
         f"- 冒険者: `{adventurer_name}`\n"

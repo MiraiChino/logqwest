@@ -8,7 +8,7 @@ import graphviz
 
 from src.utils.file_handler import FileHandler, FileStructure
 from src.utils.config import ConfigManager
-from adventure import run_adventure_streaming, ADVENTURE_COST
+from adventure import run_adventure_streaming, get_adv_candidates, ADVENTURE_COST, INTERVAL_MINUTES, LONG_INTERVAL_MINUTES
 from pathlib import Path
 
 config_manager = ConfigManager(Path("prompt/config.json"))
@@ -32,14 +32,14 @@ st.set_page_config(
 DEFAULT_LOCATION_EMOJI = "👤"
 
 
-def get_outcome_emoji(outcome: str) -> str:
+def get_result_emoji(result: str) -> str:
     """結果に応じて絵文字を返す"""
-    outcome_emojis = {
+    result_emojis = {
         "大成功": "💎",
         "成功": "🎁",
         "失敗": "❌",
     }
-    return outcome_emojis.get(outcome, "")
+    return result_emojis.get(result, "")
 
 def generate_map(location_history, current_location):
     """location履歴から地図を生成する"""
@@ -78,20 +78,55 @@ def generate_map(location_history, current_location):
 
     return g
 
-def _process_adventure_log(adventure_log_content: str, start_time: datetime, adventurer_name: str) -> str:
+def _process_adventure_log(adventure_log_content: str, location_history: list, start_time: datetime, adventurer_name: str, precursor: str = None) -> str:
     """冒険ログの内容を処理して、タイムスタンプ付きのログ行リスト（HTML形式）を返す"""
     log_lines_html = []
-    for i, line in enumerate(adventure_log_content.splitlines()):
-        if line.strip():
-            current_time = start_time + timedelta(minutes=i * 2.5)
+    last_loc = None
+    current_time = start_time
+    time_increment = timedelta(minutes=INTERVAL_MINUTES)
+    long_time_increment = timedelta(minutes=LONG_INTERVAL_MINUTES)
+
+    # 入力が空の場合のガード
+    if not adventure_log_content or not location_history:
+        return ""
+
+    lines = adventure_log_content.splitlines()
+
+    # ログ行数と場所履歴の数が一致しない場合の考慮 (zipは短い方に合わせる)
+    if len(lines) != len(location_history):
+        raise ValueError(f"ログ行数{len(lines)}と場所履歴の数{len(location_history)}が一致しません。")
+
+    for i, (line, loc) in enumerate(zip(lines, location_history)):
+        if line.strip():  # 空行は無視
+            # 1. このステップで加算する時間を決定
+            increment_this_step = timedelta(0)  # 最初の行は時間経過なし
+            if i > 0:  # 2行目以降
+                is_location_change = (loc != last_loc)
+                increment_this_step = long_time_increment if is_location_change else time_increment
+
+            # 2. 時間を加算
+            current_time += increment_this_step
+
+            # 3. 時刻文字列をフォーマット
             time_str = current_time.strftime("%H:%M")
-            # 冒険者名の補完
+
+            # 4. ログ行のテキストを置換・準備
             line_with_name = line.replace("{name}", adventurer_name)
+            if precursor:
+                line_with_name = line_with_name.replace("{precursor}", precursor)
+
+            # 5. HTMLを生成してリストに追加
             time_html = f"<span style='color: gray; font-size:0.9em; margin-right:8px;'>{time_str}</span>"
             text_html = f"<span style='font-size:1em;'>{line_with_name}</span><br>"
             log_lines_html.append(time_html + text_html)
+
+            # 6. 次のループのために現在の場所を記録
+            last_loc = loc
+
     return "".join(log_lines_html) # HTML文字列を結合して返す
 
+def count_changes(seq):
+    return sum(a != b for a, b in zip(seq, seq[1:]))
 
 def display_past_adventure(entry):
     """過去の冒険詳細を表示"""
@@ -106,7 +141,7 @@ def display_past_adventure(entry):
         unsafe_allow_html=True,
     )
 
-    adventure_file = file_handler.get_adventure_path(entry['area'], entry['filename'])
+    adventure_file = file_handler.get_adventure_path(entry['area'], entry['adventure'])
     if not adventure_file.exists():
         st.error("冒険記録ファイルが見つかりません")
         return
@@ -114,6 +149,10 @@ def display_past_adventure(entry):
     try:
         with adventure_file.open("r", encoding="utf-8") as f:
             adventure_log_content = f.read()
+        location_history_path = file_handler.get_location_path(entry['area'], entry['adventure'])
+        if location_history_path.exists():
+            with location_history_path.open("r", encoding="utf-8") as f:
+                location_history = [loc.strip() for loc in f.readlines() if loc.strip()]
     except Exception as e:
         st.error(f"ファイル読み込みエラー: {str(e)}")
         return
@@ -122,7 +161,9 @@ def display_past_adventure(entry):
 
     # 冒険期間の表示形式
     num_lines = sum(1 for line in adventure_log_content.splitlines() if line.strip())
-    duration_minutes = (num_lines - 1) * 2.5
+    duration_minutes = (num_lines - 1) * INTERVAL_MINUTES
+    if location_history:
+        duration_minutes += count_changes(location_history) * (LONG_INTERVAL_MINUTES - INTERVAL_MINUTES)
     end_time = start_time + timedelta(minutes=duration_minutes)
     if start_time.date() == end_time.date():
         duration_str = f"{start_time.strftime('%m/%d(%a) %H:%M')} ~ {end_time.strftime('%H:%M')}"
@@ -131,7 +172,7 @@ def display_past_adventure(entry):
     st.metric("冒険期間", duration_str)
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("結果", f"{get_outcome_emoji(entry['outcome'])} {entry['outcome']}")
+    col1.metric("結果", f"{get_result_emoji(entry['result'])} {entry['result']}")
     col2.metric("報酬", f"¥{entry['prize']}")
     col3.metric("冒険者", entry["adventurer"])
     col4.metric("エリア", entry["area"])
@@ -145,29 +186,25 @@ def display_past_adventure(entry):
 
     with left_column:
         st.markdown("#### 冒険ログ")
-        log_html = _process_adventure_log(adventure_log_content, start_time, entry["adventurer"]) # HTML文字列を取得
+        log_html = _process_adventure_log(adventure_log_content, location_history, start_time, entry["adventurer"], entry["precursor"]) # HTML文字列を取得
         st.markdown(log_html, unsafe_allow_html=True) # markdown で HTML を表示
 
     # マップを表示
-    location_history_path = file_handler.get_location_path(entry['area'], entry['filename'])
-    if location_history_path.exists():
-        with location_history_path.open("r", encoding="utf-8") as f:
-            location_history = [loc.strip() for loc in f.readlines() if loc.strip()]
-        if location_history:
-            adv_map = generate_map(location_history, None) # current_location は None
-            if adv_map:
-                with right_column:
-                    map_container.graphviz_chart(adv_map)
+    if location_history:
+        adv_map = generate_map(location_history, None) # current_location は None
+        if adv_map:
+            with right_column:
+                map_container.graphviz_chart(adv_map)
 
 
 def show_adventure_history_sidebar(adventure_history):
     """サイドバーに冒険履歴を表示し、選択された冒険を返す"""
     st.subheader("最近の冒険")
     for entry in adventure_history:
-        outcome_emoji = get_outcome_emoji(entry["outcome"])
+        result_emoji = get_result_emoji(entry["result"])
         caption_text = (
             f"{datetime.fromisoformat(entry['timestamp']).strftime('%m/%d')} "
-            f"{outcome_emoji} "
+            f"{result_emoji} "
             f"{entry['adventurer']} - "
             f"{entry['area']}"
         )
@@ -281,7 +318,8 @@ def main():
             st.query_params.clear()
             st.rerun()
 
-        total_balance = sum(entry.get("prize", 0) - ADVENTURE_COST for entry in adventure_history)
+        # total_balance = sum(entry.get("prize", 0) for entry in adventure_history)
+        total_balance = 1000 + sum(entry.get("prize", 0) - ADVENTURE_COST for entry in adventure_history)
         st.metric("💰所持金", f"¥{total_balance}")
         show_adventure_history_sidebar(adventure_history)
 

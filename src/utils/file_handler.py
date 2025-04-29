@@ -3,6 +3,7 @@ from typing import Optional, List, Iterator, Dict
 from dataclasses import dataclass
 import json
 import csv
+import re
 
 import pandas as pd
 
@@ -91,6 +92,16 @@ class FileHandler:
             return area_df[area_df["エリア名"] == area_name]["次のエリア"].values[0]
         return None
 
+    def get_area_name(self, adventure_name: str) -> Optional[str]:
+        if '_' in adventure_name:
+            result_num, area_name = adventure_name.split('_')
+            return area_name
+        return None
+    
+    def get_result(self, adventure_name: str) -> Optional[str]:
+        m = re.match(r'^(大成功|成功|失敗)', adventure_name)
+        return m.group(1) if m else None
+
     def load_all_lv_area_dict(self) -> Dict:
         lv_areas_csv_paths = self.get_all_areas_csv_path()
         lv_areas_data = {}
@@ -126,6 +137,18 @@ class FileHandler:
             
         df = pd.read_csv(area_csv)
         return df["冒険名"].tolist() if "冒険名" in df.columns else []
+
+    def load_area_adventures_with_result_and_prevadv(self, area_name: str) -> List[str]:
+        area_csv = self.get_area_csv_path(area_name)
+        if not area_csv.exists():
+            return []
+            
+        df = pd.read_csv(area_csv)
+        if "冒険名" in df.columns and "結果" in df.columns:
+            for index, row in df.iterrows():
+                yield row["冒険名"], row["結果"], row["前の冒険"]
+        else:
+            return []
 
     def load_all_area_names(self) -> List[str]:
         df = self.load_areas_csv()
@@ -188,14 +211,15 @@ class FileHandler:
 
     def load_valid_areas(self) -> list[str]:
         """有効なエリア一覧をCSVから読み込み、対応するCSVファイルが存在するエリアのみ返す。"""
-        areas_file = self.get_all_areas_csv_path()
+        areas_files = self.get_all_areas_csv_path()
         valid_areas = []
-        with areas_file.open("r", encoding="utf-8") as f:
-            for row in csv.reader(f):
-                if row:
-                    area = row[0].strip()
-                    if self.get_area_csv_path(area).exists():
-                        valid_areas.append(area)
+        for areas_file in areas_files:
+            with areas_file.open("r", encoding="utf-8") as f:
+                for row in csv.reader(f):
+                    if row:
+                        area = row[0].strip()
+                        if self.get_area_csv_path(area).exists():
+                            valid_areas.append(area)
         return valid_areas
 
     def load_nonext_adventures(self, area_name: str):

@@ -1,6 +1,7 @@
 import re
 from typing import Dict, Optional
 from pathlib import Path
+from collections import defaultdict
 
 from src.core.generator import ContentGenerator
 from src.core.client import ResponseFormat
@@ -107,6 +108,7 @@ class LogGenerator(ContentGenerator):
 
         # 許可されているプレースホルダー
         allowed = {"name", "precursor"}
+        line.format_map(defaultdict(str, name="テスト", precursor="テスト"))
 
         # 許可されていないものが含まれていればエラーを出す
         for ph in placeholders:
