@@ -182,15 +182,31 @@ class FileHandler:
 
     def load_nonext_area_name_and_lv(self):
         df = self.load_areas_csv()
-        nonext_df = df[df["次のエリア"] == "なし"]
-        nonext_area_names = nonext_df["エリア名"].tolist()
-        if nonext_area_names:
-            nonext_area_name = nonext_area_names[0]
-            lvs = df[df["エリア名"] == nonext_area_name]["難易度"].to_list()
-            difficulty = int(lvs[0].split(":")[0])
-            return nonext_area_name, difficulty
-        else:
-            return None, None
+        
+        # "次のエリア" が "なし" の行をフィルタリング
+        nonext_df = df[df["次のエリア"] == "なし"].copy() 
+
+        if nonext_df.empty:
+            return None, None # 対象エリアがない場合はNoneを返す
+
+        # "難易度" カラムから数値部分を抽出して新しい 'lv' カラムを作成
+        # 例: "10:easy" -> 10
+        try:
+            nonext_df['lv_numeric'] = nonext_df['難易度'].apply(lambda x: int(str(x).split(':')[0]))
+        except ValueError as e:
+            print(f"難易度カラムの解析中にエラーが発生しました: {e}")
+            return None, None # 解析エラー時はNoneを返す
+
+        # 'lv_numeric' カラムで昇順にソート
+        sorted_nonext_df = nonext_df.sort_values(by='lv_numeric', ascending=True)
+
+        # ソート後、最初の行（一番lvの低いエリア）の情報を取得
+        lowest_lv_area_info = sorted_nonext_df.iloc[0]
+        
+        area_name = lowest_lv_area_info["エリア名"]
+        difficulty = int(lowest_lv_area_info["lv_numeric"]) # 既に数値なのでそのままキャスト
+
+        return area_name, difficulty
 
     def load_check_csv(self, area_name: str, check_type: str) -> pd.DataFrame:
         check_csv_path = self.get_check_path(area_name, check_type)
