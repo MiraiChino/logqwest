@@ -161,6 +161,7 @@ def run_adventure_streaming():
             if increment_this_step > timedelta(0):
                 sleep_seconds = increment_this_step.total_seconds()
                 actual_sleep_duration = sleep_seconds / 3600
+                actual_sleep_duration = sleep_seconds / 60
                 # print(f"デバッグ: Step {i}, 場所変更: {is_location_change}, 増加時間: {increment_this_step}, sleep: {actual_sleep_duration:.2f}秒") # 必要ならコメント解除
 
                 if actual_sleep_duration > 0:

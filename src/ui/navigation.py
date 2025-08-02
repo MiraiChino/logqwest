@@ -1,5 +1,5 @@
 import streamlit as st
-from typing import List, Dict
+from typing import Dict
 
 class SidebarNavigation:
     def __init__(self, file_handler, progress_tracker):

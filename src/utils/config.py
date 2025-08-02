@@ -14,6 +14,8 @@ class PathConfig:
 class ConfigManager:
     def __init__(self, config_path: Path):
         self.config = self._load_json(config_path)
+        self.item_value_table = self.config.get("ITEM_VALUE_TABLE", {"大成功": 100, "成功": 10, "失敗": 0})
+        self.item_details = self.config.get("ITEM_DETAILS", {})
 
     def _load_json(self, config_path: Path) -> Dict:
         if not config_path.exists():

@@ -1,10 +1,7 @@
-setuptools
-graphviz
-duckdb
-google-generativeai
-grpcio==1.67.1
-watchdog
-pandas
-streamlit
-json5
-groq
+setuptools==75.8.2
+graphviz==0.20.3
+google-generativeai==0.8.4
+pandas==2.2.3
+streamlit==1.42.0
+json5==0.10.0
+requests==2.32.3

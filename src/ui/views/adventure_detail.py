@@ -20,9 +20,34 @@ class AdventureDetailView(BaseView):
 
         self._render_adventure_content(area_name, adventure_name)
 
+        # アイテム表示と売却機能
+        self._render_items_section(area_name, adventure_name)
+
         if st.button("戻る"):
             st.query_params.update({"area": area_name, "adv": ""})
             st.rerun()
+
+    def _render_items_section(self, area_name: str, adventure_name: str):
+        st.markdown("**獲得アイテム**")
+        area_df = self.load_area_csv(area_name)
+        if area_df is not None:
+            adventure_row = area_df[area_df["冒険名"] == adventure_name]
+            if not adventure_row.empty:
+                items_str = adventure_row["アイテム"].iloc[0]
+                if items_str:
+                    item_names = [s for s in items_str.split(';') if s]
+                    if item_names:
+                        for name in item_names:
+                            desc = self.file_handler.get_item_description(name)
+                            st.write(f"- {name}")
+                            if desc:
+                                st.caption(desc)
+                    else:
+                        st.info("この冒険ではアイテムを獲得しませんでした。")
+                else:
+                    st.info("この冒険ではアイテムを獲得しませんでした。")
+            else:
+                st.warning("冒険データが見つかりません。")
 
     def _render_row(self, df, adventure_name: str, info_title: str, area_name: str = None) -> bool:
         if df is not None:
@@ -32,6 +57,11 @@ class AdventureDetailView(BaseView):
                 if area_name:
                     clickable_adv_row = self._make_adventures_clickable(adventure_row, area_name)
                     clickable_adv_row = self.make_groups(clickable_adv_row, "冒険", ["冒険名", "次の冒険", "前の冒険"])
+                    # 空の章列を非表示化
+                    if all(col in clickable_adv_row.columns for col in ["1章","2章","3章","4章","5章","6章","7章","8章"]):
+                        non_empty_cols = [c for c in ["1章","2章","3章","4章","5章","6章","7章","8章"] if clickable_adv_row[c].astype(str).str.strip().any()]
+                        keep_cols = [c for c in clickable_adv_row.columns if c not in ["1章","2章","3章","4章","5章","6章","7章","8章"]] + non_empty_cols
+                        clickable_adv_row = clickable_adv_row[keep_cols]
                     self._display_dataframe_grouped(clickable_adv_row, start_idx=1)
                 else:
                     self._display_dataframe(adventure_row)

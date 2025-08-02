@@ -39,9 +39,16 @@ class ContentGenerator(ABC):
 
     def extract_json(self, response: str) -> str:
         match = self.json_pattern.search(response)
-        if not match:
+        json_text = None
+        if match:
+            json_text = match.group(1).strip()
+        else:
+            brace_start = response.find("{")
+            brace_end = response.rfind("}")
+            if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
+                json_text = response[brace_start:brace_end+1]
+        if not json_text:
             raise ValueError("レスポンスに```json ```形式のJSONが見つかりません。")
-        json_text = match.group(1).strip()
         try:
             content = json5.loads(json_text)
             return content

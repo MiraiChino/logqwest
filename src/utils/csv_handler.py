@@ -32,7 +32,9 @@ class CSVHandler:
             prev_adventure = row["前の冒険"]
             next_adventure = row["次の冒険"]
             result = row["結果"]
-            chapters = list(row.values())[4:] # 冒険名,前冒険,後冒険,結果を飛ばす
+            values = list(row.values())
+            chapters = values[4:-1]
+            item = values[-1]
             yield adventure_name, prev_adventure, next_adventure, result, chapters
 
     def write_row(self, file_path: Path, row: List[str], headers: List[str] = None):
@@ -62,6 +64,7 @@ class CSVHandler:
         if not rows:
             return
             
+        rows = [{k: ("" if v is None else v) for k, v in row.items() if k is not None} for row in rows]
         headers = list(rows[0].keys())
         with self.current_path.open('w', encoding='utf-8', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=headers)
@@ -91,6 +94,7 @@ class CSVHandler:
              return
 
         try:
+            rows = [{k: ("" if v is None else v) for k, v in row.items() if k is not None} for row in rows]
             with file_path.open('w', encoding='utf-8', newline='') as file:
                 writer = csv.DictWriter(file, fieldnames=headers)
                 writer.writeheader()

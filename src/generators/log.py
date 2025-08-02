@@ -48,7 +48,7 @@ class LogGenerator(ContentGenerator):
     def _get_chapter_texts(self, area_csv_path: str, adventure_name: str, chapter_index: int) -> tuple[str, str]:
         chapters = self._load_chapters(area_csv_path, adventure_name)
         chapter_text = chapters[chapter_index]
-        if chapter_index + 1 < len(self.config_manager.chapter_settings):
+        if chapter_index + 1 < len(chapters):
             next_chapter_text = chapters[chapter_index + 1]
         else:
             next_chapter_text = "（次章はなく、物語はこの章で終わる。）"
@@ -61,11 +61,16 @@ class LogGenerator(ContentGenerator):
         else:
             before_log = self.config_manager.before_log_template["default"]
         area_info_text, are_info_added = self._format_area_info_text(chapter_text, area_info)
-        thischapter_setting = self.config_manager.chapter_settings[chapter_index]
+        settings = self.config_manager.chapter_settings or []
+        thischapter_setting = settings[min(chapter_index, len(settings) - 1)] if settings else {}
+        end_of_story = next_chapter_text == "（次章はなく、物語はこの章で終わる。）"
+        after_chapter = thischapter_setting.get("after_chapter", "")
+        if end_of_story:
+            after_chapter = thischapter_setting.get("after_chapter", "") or self.config_manager.config.get("AFTER_CHAPTER_AT_END", after_chapter)
         kwargs = {
             "before_chapter": thischapter_setting.get("before_chapter", ""),
             "chapter": chapter_text,
-            "after_chapter": thischapter_setting.get("after_chapter", ""),
+            "after_chapter": after_chapter,
             "next_chapter": next_chapter_text,
             "before_log": before_log,
             "area_info": area_info_text.strip() if are_info_added else "",
@@ -79,10 +84,12 @@ class LogGenerator(ContentGenerator):
         if not area_info:
             raise ValueError(f"エリア '{area_name}' が見つかりません。")
 
-        # チャプターの取得
-        chapter_text, next_chapter_text = self._get_chapter_texts(area_csv_path, adventure_name, chapter_index)
+        chapters = self._load_chapters(area_csv_path, adventure_name)
+        if chapter_index >= len(chapters):
+            return None
+        chapter_text = chapters[chapter_index]
+        next_chapter_text = chapters[chapter_index + 1] if chapter_index + 1 < len(chapters) else "（次章はなく、物語はこの章で終わる。）"
     
-        # ログ生成用のkwargsを構築
         kwargs = self._build_kwargs(chapter_text, next_chapter_text, previous_log, chapter_index, area_info, precursor_log)
 
         response = self.generate(response_format=ResponseFormat.TEXT, debug=debug, **kwargs)

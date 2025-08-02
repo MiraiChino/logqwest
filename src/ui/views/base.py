@@ -66,14 +66,16 @@ class BaseView:
     
     def render_format_cell_content(self, value):
         if isinstance(value, str):
+
+
             if ';' in value:
                 formatted_text = ""
                 for element in value.split(';'):
                     if ':' in element:
                         key, val = element.split(':', 1)
-                        formatted_text += f"**{key}**: {val}  \n"
+                        formatted_text += f"**{key}**: {val}  \\n"
                     else:
-                        formatted_text += f"{element}  \n"
+                        formatted_text += f"{element}  \\n"
                 return st.markdown(formatted_text)
             elif ':' in value:
                 key, val = value.split(':', 1)

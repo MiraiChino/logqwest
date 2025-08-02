@@ -8,7 +8,7 @@ import graphviz
 
 from src.utils.file_handler import FileHandler, FileStructure
 from src.utils.config import ConfigManager
-from adventure import run_adventure_streaming, get_adv_candidates, ADVENTURE_COST, INTERVAL_MINUTES, LONG_INTERVAL_MINUTES
+from adventure import run_adventure_streaming, ADVENTURE_COST, INTERVAL_MINUTES, LONG_INTERVAL_MINUTES
 from pathlib import Path
 
 config_manager = ConfigManager(Path("prompt/config.json"))
@@ -173,9 +173,13 @@ def display_past_adventure(entry):
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("結果", f"{get_result_emoji(entry['result'])} {entry['result']}")
-    col2.metric("報酬", f"¥{entry['prize']}")
-    col3.metric("冒険者", entry["adventurer"])
-    col4.metric("エリア", entry["area"])
+    col2.metric("冒険者", entry["adventurer"])
+    col3.metric("エリア", entry["area"])
+
+    if entry.get("items"):
+        st.markdown("#### 獲得アイテム")
+        for item in entry["items"]:
+            st.write(f"- {item['name']} x {item['quantity']} (価値: ¥{item['value']})")
 
     # カラムレイアウトを作成
     left_column, right_column = st.columns([3, 1])
@@ -288,6 +292,12 @@ def show_home(adventure_history):
 
                 elif event["type"] == "summary":
                     summary_container.markdown(f"### 冒険結果\n{event['text']}")
+                    if "items" in event and event.get("result") != "失敗":
+                        st.markdown("#### 獲得アイテム")
+                        for name in event["items"]:
+                            st.write(f"- {name}")
+                            file_handler.add_item_to_inventory(name, event.get("result", "成功"), config_manager.item_value_table)
+                    file_handler.update_balance(-ADVENTURE_COST) # 冒険費用を差し引く
                 message_container.markdown("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
                 time.sleep(0.1)
             if return_button_container.button("戻る", key="return_button"):
@@ -318,9 +328,8 @@ def main():
             st.query_params.clear()
             st.rerun()
 
-        # total_balance = sum(entry.get("prize", 0) for entry in adventure_history)
-        total_balance = 1000 + sum(entry.get("prize", 0) - ADVENTURE_COST for entry in adventure_history)
-        st.metric("💰所持金", f"¥{total_balance}")
+        current_balance = file_handler.load_usage_data().get("balance", 0)
+        st.metric("💰所持金", f"¥{current_balance}")
         show_adventure_history_sidebar(adventure_history)
 
     if selected_entry:

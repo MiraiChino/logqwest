@@ -1,4 +1,5 @@
 import streamlit as st
+import re
 
 from ..views.base import BaseView
 
@@ -83,8 +84,22 @@ class AreaDetailView(BaseView):
         for adventure_name in unique_adventure_names:
             label = self._get_adventure_label(area_name, adventure_name)
             with st.expander(f"{label}{adventure_name}", expanded=False): # 初期状態は閉じたexpander
-                adventure_summary_df = adventures_df[adventures_df["冒険名"] == adventure_name]
+                adventure_summary_df = adventures_df[adventures_df["冒険名"] == adventure_name].copy()
                 if not adventure_summary_df.empty:
+                    item_name = adventure_summary_df.get("アイテム", adventure_summary_df.get("items", "")).astype(str)
+                    item_name = item_name.replace({"None": "", "nan": ""}).fillna("")
+                    chapter_cols = [c for c in adventure_summary_df.columns if re.match(r"^\d+章$", str(c))]
+                    last_col = None
+                    for c in reversed(chapter_cols):
+                        col = adventure_summary_df[c].astype(str).replace({"nan": ""}).fillna("")
+                        if col.str.strip().ne("").any():
+                            last_col = c
+                            break
+                    for c in chapter_cols:
+                        adventure_summary_df[c] = adventure_summary_df[c].astype(str).replace({"nan": ""}).fillna("")
+                    if last_col and last_col == (chapter_cols[-1] if chapter_cols else None):
+                        suffix = item_name.apply(lambda x: f"｜{x}" if isinstance(x, str) and x.strip() else "")
+                        adventure_summary_df[last_col] = adventure_summary_df[last_col].astype(str).fillna("") + suffix
                     clickable_adv_df = self._make_adventures_clickable(adventure_summary_df, area_name)
                     clickable_adv_df = self.make_groups(clickable_adv_df, "冒険", ["冒険名", "次の冒険", "前の冒険"])
                     self._display_dataframe_grouped(clickable_adv_df, start_idx=1)
@@ -95,7 +110,7 @@ class AreaDetailView(BaseView):
                     adventure_check_adv_df = check_adv_df[check_adv_df["冒険名"] == adventure_name]
                     if not adventure_check_adv_df.empty:
                         clickable_adv_df = self._make_adventures_clickable(adventure_check_adv_df, area_name)
-                        selected_adv_df = self._display_dataframe_with_checkbox(adventure_check_adv_df, clickable_adv_df)
+                        selected_adv_df = self._display_dataframe_with_checkbox_grouped(adventure_check_adv_df, clickable_adv_df)
                         self._handle_deletion(selected_adv_df, area_name, "adventures")
 
                 # Check: 冒険ログ

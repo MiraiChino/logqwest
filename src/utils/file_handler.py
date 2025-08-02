@@ -422,22 +422,75 @@ class FileHandler:
 
     def load_usage_data(self) -> dict:
         """
-        使用履歴と収支情報をJSONファイルから読み込む。
+        使用履歴、アイテムインベントリ、収支情報をJSONファイルから読み込む。
         """
         user_data_file = USER_DATA_FILE
         try:
             with user_data_file.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if "adventure_history" not in data: # 初回起動時などでキーが存在しない場合
-                    return {"adventure_history": []} # 空のリストで初期化
+                    data["adventure_history"] = [] # 空のリストで初期化
+                if "inventory" not in data:
+                    data["inventory"] = []
+                if "balance" not in data:
+                    data["balance"] = 1000 # 初期所持金
                 data["adventure_history"].sort(key=lambda item: item["timestamp"], reverse=True)
                 return data
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"adventure_history": []}
+            return {"adventure_history": [], "inventory": [], "balance": 1000}
 
     def save_usage_data(self, data: dict):
-        """使用履歴と収支情報をJSONファイルへ保存する。"""
+        """使用履歴、アイテムインベントリ、収支情報をJSONファイルへ保存する。"""
         user_data_file = USER_DATA_FILE
         user_data_file.parent.mkdir(parents=True, exist_ok=True)
         with user_data_file.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def add_item_to_inventory(self, item_name: str, result: str, value_table: Dict[str, int]) -> None:
+        data = self.load_usage_data()
+        inventory = data.get("inventory", [])
+        value = value_table.get(result, 0)
+        inventory.append({"name": item_name, "quantity": 1, "value": value})
+        data["inventory"] = inventory
+        self.save_usage_data(data)
+
+    def remove_item_from_inventory(self, item_name: str) -> bool:
+        data = self.load_usage_data()
+        inventory = data.get("inventory", [])
+        for item in inventory:
+            if item["name"] == item_name:
+                inventory.remove(item)
+                data["inventory"] = inventory
+                self.save_usage_data(data)
+                return True
+        return False
+
+    def update_balance(self, amount: int) -> None:
+        data = self.load_usage_data()
+        data["balance"] = data.get("balance", 0) + amount
+        self.save_usage_data(data)
+
+    def get_item_description(self, name: str) -> str:
+        # 1) 対象エリアCSVから説明を取得（名前:説明;... 形式を優先）
+        areas = self.load_all_area_names()
+        for area in areas:
+            df = self.load_area_csv(area)
+            if df is None or "採取できるアイテム" not in df.columns:
+                continue
+            col = df["採取できるアイテム"].dropna().astype(str)
+            for cell in col:
+                for token in cell.split(";"):
+                    token = token.strip()
+                    if not token:
+                        continue
+                    if ":" in token:
+                        n, desc = token.split(":", 1)
+                        if n.strip() == name:
+                            return desc.strip()
+                    else:
+                        if token == name:
+                            # 2) 括弧形式 名称（説明）や 名称-説明 を推測抽出
+                            # ただしトークンが完全一致の場合は説明なし
+                            pass
+        # 3) lv*.csvに説明があれば抽出（将来拡張）
+        return ""
