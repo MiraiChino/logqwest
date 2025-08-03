@@ -88,7 +88,7 @@ class ProgressTracker:
         return True
 
 
-    def _is_file_complete(self, file_path: Path, min_lines: int = 160) -> bool:
+    def _is_file_complete(self, file_path: Path, min_lines: int = 50) -> bool:
         if not file_path.exists():
             return False
         with file_path.open('r', encoding='utf-8') as f:
