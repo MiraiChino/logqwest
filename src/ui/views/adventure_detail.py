@@ -33,15 +33,12 @@ class AdventureDetailView(BaseView):
         if area_df is not None:
             adventure_row = area_df[area_df["冒険名"] == adventure_name]
             if not adventure_row.empty:
-                items_str = adventure_row["アイテム"].iloc[0]
-                if items_str:
-                    item_names = [s for s in items_str.split(';') if s]
-                    if item_names:
-                        for name in item_names:
-                            desc = self.file_handler.get_item_description(name)
-                            st.write(f"- {name}")
-                            if desc:
-                                st.caption(desc)
+                item_name = adventure_row["アイテム"].iloc[0]
+                if item_name:
+                    desc = self.file_handler.get_item_description(item_name)
+                    if desc:
+                        st.write(f"- `{item_name}`")
+                        st.caption(desc)
                     else:
                         st.info("この冒険ではアイテムを獲得しませんでした。")
                 else:

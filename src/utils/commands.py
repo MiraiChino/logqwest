@@ -700,6 +700,7 @@ class CommandHandler:
         prev_area_name = self.file_handler.get_previous_area_name(area_name)
         precursor_log = self.file_handler.read_adventure_log(prev_area_name, previous_adventure_name) if prev_area_name and previous_adventure_name else None
         chapters = adventure.chapters
+        total = sum(1 for c in chapters if c and c.strip())
         for chapter_index in range(len(chapters)):
             if chapter_index >= len(chapters) or not chapters[chapter_index]:
                 continue
@@ -717,7 +718,7 @@ class CommandHandler:
                 break
             if self.context.debug_mode:
                 print(content)
-            self.logger.generate(f"ログ {chapter_index+1}/{len(chapters)}: {adventure.name}")
+            self.logger.generate(f"ログ {chapter_index+1}/{total}: {adventure.name}")
             self.file_handler.write_text(temp_path, content, append=True)
             previous_log = content
         return self.file_handler.read_text(temp_path)
