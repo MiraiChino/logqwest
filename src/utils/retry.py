@@ -35,7 +35,6 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
                         time.sleep(sleep_for)
                         waited += sleep_for
                         backoff = min(backoff * 2, 60)
-                        continue
                     else:
                         error = traceback.format_exc()
                 print(f"❌ {attempt}/{max_retries}: {error}")

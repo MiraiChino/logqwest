@@ -24,7 +24,7 @@ class LogGenerator(ContentGenerator):
         return area_data
 
     def _load_chapters(self, area_csv_path: str, adventure_name: str):
-        for adv_name, prev_adv, next_adv, result, chapters in self.csv_handler.read_adventures(area_csv_path):
+        for adv_name, prev_adv, next_adv, result, chapters, item in self.csv_handler.read_adventures(area_csv_path):
             if adv_name == adventure_name:
                 return chapters
         raise ValueError(f"冒険 '{adventure_name}' が見つかりません。")
@@ -66,7 +66,7 @@ class LogGenerator(ContentGenerator):
         end_of_story = next_chapter_text == "（次章はなく、物語はこの章で終わる。）"
         after_chapter = thischapter_setting.get("after_chapter", "")
         if end_of_story:
-            after_chapter = thischapter_setting.get("after_chapter", "") or self.config_manager.config.get("AFTER_CHAPTER_AT_END", after_chapter)
+            after_chapter = self.config_manager.ending_line
         kwargs = {
             "before_chapter": thischapter_setting.get("before_chapter", ""),
             "chapter": chapter_text,
@@ -88,7 +88,9 @@ class LogGenerator(ContentGenerator):
         if chapter_index >= len(chapters):
             return None
         chapter_text = chapters[chapter_index]
-        next_chapter_text = chapters[chapter_index + 1] if chapter_index + 1 < len(chapters) else "（次章はなく、物語はこの章で終わる。）"
+        # 次章が存在しない、または次章の内容が空なら物語はここで終わる
+        is_last_effective = (chapter_index + 1 >= len(chapters)) or (not chapters[chapter_index + 1])
+        next_chapter_text = chapters[chapter_index + 1] if not is_last_effective else "（次章はなく、物語はこの章で終わる。）"
     
         kwargs = self._build_kwargs(chapter_text, next_chapter_text, previous_log, chapter_index, area_info, precursor_log)
 

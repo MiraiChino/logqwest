@@ -101,3 +101,7 @@ class ConfigManager:
     @property
     def before_log_template(self) -> Dict[str, str]:
         return self.config.get("BEFORE_LOG_TEMPLATE", {})
+
+    @property
+    def ending_line(self) -> str:
+        return self.config.get("ENDING_LINE", "冒険は終了")

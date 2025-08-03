@@ -32,10 +32,9 @@ class CSVHandler:
             prev_adventure = row["前の冒険"]
             next_adventure = row["次の冒険"]
             result = row["結果"]
-            values = list(row.values())
-            chapters = values[4:-1]
-            item = values[-1]
-            yield adventure_name, prev_adventure, next_adventure, result, chapters
+            chapters = [row.get(f"{i}章", "") for i in range(1, 9)]
+            item = row.get("アイテム", row.get("item", ""))
+            yield adventure_name, prev_adventure, next_adventure, result, chapters, item
 
     def write_row(self, file_path: Path, row: List[str], headers: List[str] = None):
         self.current_path = file_path

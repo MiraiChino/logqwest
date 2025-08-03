@@ -25,6 +25,7 @@ class Adventure:
     name: str
     result: str
     chapters: List[str]
+    item: str = ""
     prev_adventure_name: Optional[str] = "なし"
 
 
@@ -457,11 +458,12 @@ class CommandHandler:
     
         adventures = []
         try:
-            for adv_name, prev_adv, next_adv, result, chapters in self.csv_handler.read_adventures(area_csv):
+            for adv_name, prev_adv, next_adv, result, chapters, item in self.csv_handler.read_adventures(area_csv):
                 adventures.append(Adventure(
                     name=adv_name,
                     result=result,
-                    chapters=chapters
+                    chapters=chapters,
+                    item=item
                 ))
         except Exception as e:
             import traceback
@@ -474,11 +476,12 @@ class CommandHandler:
         area_csv = self.file_handler.get_area_csv_path(area_name)
 
         try:
-            for adv_name, prev_adv, next_adv, result, chapters in self.csv_handler.read_adventures(area_csv):
+            for adv_name, prev_adv, next_adv, result, chapters, item in self.csv_handler.read_adventures(area_csv):
                 return Adventure(
                     name=adv_name,
                     result=result,
-                    chapters=chapters
+                    chapters=chapters,
+                    item=item
                 )
         except Exception as e:
             import traceback
@@ -625,7 +628,7 @@ class CommandHandler:
 
             # ログ チェック
             summary = ','.join(adventure.chapters)
-            check_result = checker.check_log(summary, adventure.result, log_content, adventure.name, debug=self.context.debug_mode)
+            check_result = checker.check_log(summary, adventure.result, log_content, adventure.name, item=adventure.item, debug=self.context.debug_mode)
             if self.context.debug_mode:
                 print(check_result)
 
@@ -692,13 +695,14 @@ class CommandHandler:
         temp_path: Path,
     ) -> str:
         previous_log = None
-        total = len(adventure.chapters)
         area_csv_path = self.file_handler.get_area_csv_path(area_name)
         previous_adventure_name = self.file_handler.get_previous_adventure_name(area_name, adventure.name)
         prev_area_name = self.file_handler.get_previous_area_name(area_name)
         precursor_log = self.file_handler.read_adventure_log(prev_area_name, previous_adventure_name) if prev_area_name and previous_adventure_name else None
         chapters = adventure.chapters
         for chapter_index in range(len(chapters)):
+            if chapter_index >= len(chapters) or not chapters[chapter_index]:
+                continue
             content = generator.generate_log(
                 area_name=area_name,
                 adventure_name=adventure.name,
