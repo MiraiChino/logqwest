@@ -51,7 +51,7 @@ class ContentChecker(ABC):
             if "評価" not in check_result[key]:
                 raise ValueError(f"キー '{key}' に '評価' フィールドが存在しません。")
             if check_result[key]["評価"] not in self.check_marks:
-                raise ValueError(f"{key}: {check_result[key]["評価"]}{check_result[key]["理由"]}")
+                raise ValueError(f"{key}: {check_result[key]['評価']}{check_result[key]['理由']}")
         return True
 
     def generate(self, response_format: Dict = ResponseFormat.TEXT, temperature: float = 0, 
