@@ -35,7 +35,6 @@ class GeminiClient(BaseClient):
                 max_output_tokens=max_tokens,
             )
         )
-        time.sleep(DEFAULT_WAIT_TIME)
         return response.text
 
 
@@ -60,7 +59,6 @@ class OpenRouterClient(BaseClient):
         resp = requests.post(url, headers=headers, json=body, timeout=120)
         resp.raise_for_status()
         data = resp.json()
-        time.sleep(DEFAULT_WAIT_TIME)
         return data["choices"][0]["message"]["content"]
 
 

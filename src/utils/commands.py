@@ -174,9 +174,8 @@ class CommandHandler:
                         result_filter
                     )
             except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
+                self.logger.warning(f"API制限: リトライします。モデル：{self.context.model_name}")
+                raise
             if not check_only and debug_breaked:
                 break
 
@@ -233,9 +232,8 @@ class CommandHandler:
                         log_extrator
                     )
             except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
+                self.logger.warning(f"API制限: リトライします。モデル：{self.context.model_name}")
+                raise
             if not check_only and debug_breaked:
                 break
 
@@ -271,9 +269,8 @@ class CommandHandler:
                 else:
                     debug_breaked = self._process_area_logs(log_generator, log_checker, area_name)
             except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
+                self.logger.warning(f"API制限: リトライします。モデル：{self.context.model_name}")
+                raise
             if not check_only and debug_breaked:
                 break
     def execute_locked_log_command(self) -> None:
@@ -308,9 +305,8 @@ class CommandHandler:
                 else:
                     debug_breaked = self._process_area_logs(log_generator, log_checker, area_name)
             except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
+                self.logger.warning(f"API制限: リトライします。モデル：{self.context.model_name}")
+                raise
             if not check_only and debug_breaked:
                 break
 
@@ -348,9 +344,8 @@ class CommandHandler:
                 else:
                     debug_breaked = self._process_area_locations(location_generator, location_checker, area_name)
             except RateLimitExeeded:
-                self.logger.warning(f"API制限: 15分待機します。モデル：{self.context.model_name}")
-                time.sleep(60 * 15)
-                sys.exit(1)
+                self.logger.warning(f"API制限: リトライします。モデル：{self.context.model_name}")
+                raise
             if not check_only and debug_breaked:
                 break
 
