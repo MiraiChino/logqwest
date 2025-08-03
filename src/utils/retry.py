@@ -38,7 +38,8 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
                         backoff = min(backoff * 2, 60)
                     else:
                         error = traceback.format_exc()
-                 print(f"❌ {attempt}/{max_retries}: {error or 'Unknown error'}")                if attempt < max_retries:
+                print(f"❌ {attempt}/{max_retries}: {error or 'Unknown error'}")
+                if attempt < max_retries:
                     time.sleep(backoff)
                     backoff = min(backoff * 2, 60)
             raise RetryLimitExeeded(f"❌ {attempt}/{max_retries}: リトライ回数上限に達しました。")
