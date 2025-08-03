@@ -45,13 +45,19 @@ class ContentChecker(ABC):
         return True
 
     def is_all_checked(self, check_result: Dict) -> bool:
+        def normalize(mark: str) -> str:
+            if not isinstance(mark, str):
+                return str(mark)
+            return mark.strip().replace('[', '').replace(']', '').replace('【', '').replace('】', '')
         for key in self.check_keys:
             if key not in check_result:
                 raise ValueError(f"キー '{key}' が存在しません。")
             if "評価" not in check_result[key]:
                 raise ValueError(f"キー '{key}' に '評価' フィールドが存在しません。")
-            if check_result[key]["評価"] not in self.check_marks:
-                raise ValueError(f"{key}: {check_result[key]['評価']}{check_result[key]['理由']}")
+            eval_mark = normalize(check_result[key]["評価"]) 
+            if eval_mark not in self.check_marks:
+                reason = check_result[key].get('理由', '')
+                raise ValueError(f"{key}: {check_result[key]['評価']}{reason}")
         return True
 
     def generate(self, response_format: Dict = ResponseFormat.TEXT, temperature: float = 0, 
