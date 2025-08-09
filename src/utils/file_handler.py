@@ -472,25 +472,110 @@ class FileHandler:
 
     def get_item_description(self, name: str) -> str:
         # 1) 対象エリアCSVから説明を取得（名前:説明;... 形式を優先）
-        areas = self.load_all_area_names()
-        for area in areas:
-            df = self.load_area_csv(area)
-            if df is None or "採取できるアイテム" not in df.columns:
+        all_dfs = [self.load_areas_csv()]
+        for area_name in self.load_all_area_names():
+            all_dfs.append(self.load_area_csv(area_name))
+
+        columns_to_check = [
+            "財宝", "採取できるアイテム", "生息する危険な生物",
+            "生息する無害な生物", "経由地候補", "近くの街",
+            "移動路", "休憩ポイント", "アイテム"
+        ]
+
+        for df in all_dfs:
+            if df is None:
                 continue
-            col = df["採取できるアイテム"].dropna().astype(str)
-            for cell in col:
-                for token in cell.split(";"):
-                    token = token.strip()
-                    if not token:
-                        continue
-                    if ":" in token:
-                        n, desc = token.split(":", 1)
-                        if n.strip() == name:
-                            return desc.strip()
-                    else:
-                        if token == name:
-                            # 2) 括弧形式 名称（説明）や 名称-説明 を推測抽出
-                            # ただしトークンが完全一致の場合は説明なし
-                            pass
-        # 3) lv*.csvに説明があれば抽出（将来拡張）
+            for col_name in columns_to_check:
+                if col_name in df.columns:
+                    col = df[col_name].dropna().astype(str)
+                    for cell in col:
+                        for token in cell.split(";"):
+                            token = token.strip()
+                            if not token:
+                                continue
+                            if ":" in token:
+                                n, desc = token.split(":", 1)
+                                if n.strip() == name:
+                                    return desc.strip()
         return ""
+
+    def get_all_terms_and_descriptions(self) -> Dict[str, str]:
+        """
+        LV1データと冒険データからすべての用語とその説明を抽出し、辞書形式で返す。
+        重複する用語があった場合、後から読み込んだもので上書きする。
+        """
+        terms_dict = {}
+
+        # 1. LV1データからの抽出
+        lv_areas_df = self.load_areas_csv()
+        if lv_areas_df is not None:
+            lv1_columns = [
+                "財宝", "採取できるアイテム", "生息する危険な生物",
+                "生息する無害な生物", "経由地候補", "近くの街",
+                "移動路", "休憩ポイント"
+            ]
+            for col_name in lv1_columns:
+                if col_name in lv_areas_df.columns:
+                    for cell_value in lv_areas_df[col_name].dropna().astype(str):
+                        for token in cell_value.split(";"):
+                            token = token.strip()
+                            if not token:
+                                continue
+                            if ":" in token:
+                                name, desc = token.split(":", 1)
+                                terms_dict[name.strip()] = desc.strip()
+                            else:
+                                desc = self.get_item_description(token)
+                                terms_dict[token] = desc if desc else ""
+
+        # 2. 冒険データからの抽出
+        all_area_names = self.load_all_area_names()
+        for area_name in all_area_names:
+            area_df = self.load_area_csv(area_name)
+            if area_df is not None and "アイテム" in area_df.columns:
+                for cell_value in area_df["アイテム"].dropna().astype(str):
+                    for token in cell_value.split(";"):
+                        token = token.strip()
+                        if not token:
+                            continue
+                        if ":" in token:
+                            name, desc = token.split(":", 1)
+                            terms_dict[name.strip()] = desc.strip()
+                        else:
+                            desc = self.get_item_description(token)
+                            terms_dict[token] = desc if desc else ""
+        return terms_dict
+
+    def _make_terms_clickable(self, text: str, terms_dict: Dict[str, str]) -> str:
+        """
+        テキスト内の用語をクエリパラメータ付きのHTMLアンカータグに置換する。
+
+        Args:
+            text (str): 置換対象のテキスト
+            terms_dict (Dict[str, str]): 用語と説明の辞書 {"用語": "説明", ...}
+
+        Returns:
+            str: 用語がアンカータグに置換されたHTMLテキスト
+        """
+        if not text or not terms_dict:
+            return text or ""
+
+        # 用語を長さ順にソートして、長い用語から先に置換する（部分一致防止）
+        sorted_terms = sorted(terms_dict.keys(), key=len, reverse=True)
+        
+        # 用語を正規表現パターンに変換し、重複を除去
+        patterns = list(dict.fromkeys(re.escape(term) for term in sorted_terms))
+        
+        # すべてのパターンを結合して一つの正規表現パターンを生成
+        combined_pattern = "|".join(patterns)
+
+        if not combined_pattern:
+            return text
+
+        def replace_func(match):
+            term = match.group(0)
+            desc = terms_dict.get(term, "").replace('"', '"') # CSS属性内での引用符をエスケープ
+            # CSSでツールチップを表示するためのカスタム属性とクラスを設定
+            return f'<span class="tooltip-span" data-tooltip="{desc}" style="text-decoration: underline; color: #1E90FF; cursor: help;">{term}</span>'
+
+        return re.sub(combined_pattern, replace_func, text)
