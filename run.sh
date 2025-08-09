@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Default models
-GENERATE_MODEL="gemini/models/gemini-2.5-pro"
-CHECK_MODEL="gemini/gemini-2.5-flash-lite"
+GENERATE_MODEL="gemini/gemini-2.5-flash"
+CHECK_MODEL="gemini/models/gemini-2.5-pro"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

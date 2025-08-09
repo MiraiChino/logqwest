@@ -15,7 +15,7 @@ class RetryLimitExeeded(Exception):
 class EmptyResponseError(Exception):
     pass
 
-def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
+def retry_on_failure(max_retries: int = 10, wait_time: int = 60) -> Callable:
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
@@ -36,6 +36,7 @@ def retry_on_failure(max_retries: int = 10, wait_time: int = 10) -> Callable:
                         if waited >= max_total_wait:
                             raise RateLimitExeeded("Rate limit exceeded") from e
                         sleep_for = min(backoff, 60, max_total_wait - waited)
+                        print(f"⏳ retry {attempt}/{max_retries}: rate-limited, waiting {sleep_for}s (total {waited + sleep_for}s)")
                         time.sleep(sleep_for)
                         waited += sleep_for
                         backoff = min(backoff * 2, 60)
