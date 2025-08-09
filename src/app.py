@@ -362,6 +362,13 @@ def main():
     with st.sidebar:
         if st.button("ホーム"):
             st.query_params.clear()
+            # セッションステートをクリア
+            if 'location_history' in st.session_state:
+                st.session_state.location_history = []
+            if 'adventurer' in st.session_state:
+                st.session_state.adventurer = ""
+            if 'accumulated_messages' in st.session_state:
+                st.session_state.accumulated_messages = []
             st.rerun()
 
         current_balance = file_handler.load_usage_data().get("balance", 0)
