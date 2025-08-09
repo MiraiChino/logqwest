@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 
 class BaseView:
-    def __init__(self, file_handler, progress_tracker):
+    def __init__(self, file_handler, progress_tracker, terms_dict=None):
         self.file_handler = file_handler
         self.progress_tracker = progress_tracker
+        self.terms_dict = terms_dict if terms_dict is not None else {}
 
     def _make_areas_clickable(self, df):
         df_clickable = df.copy()

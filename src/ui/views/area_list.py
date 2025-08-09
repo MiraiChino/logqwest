@@ -4,9 +4,6 @@ import pandas as pd
 from ..views.base import BaseView
 
 class AreaListView(BaseView):
-    def __init__(self, file_handler, progress_tracker):
-        super().__init__(file_handler, progress_tracker)
-
     def render(self, areas_df):
         st.title("📖全エリア一覧")
 

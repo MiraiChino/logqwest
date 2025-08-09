@@ -9,11 +9,12 @@ class UIController:
         self.file_handler = file_handler
         self.progress_tracker = progress_tracker
         self.navigation = SidebarNavigation(file_handler, progress_tracker)
+        self.terms_dict = self.file_handler.get_all_terms_and_descriptions()
         
         self.views = {
-            'area_list': AreaListView(file_handler, progress_tracker),
-            'area_detail': AreaDetailView(file_handler, progress_tracker),
-            'adventure_detail': AdventureDetailView(file_handler, progress_tracker)
+            'area_list': AreaListView(file_handler, progress_tracker, terms_dict=self.terms_dict),
+            'area_detail': AreaDetailView(file_handler, progress_tracker, terms_dict=self.terms_dict),
+            'adventure_detail': AdventureDetailView(file_handler, progress_tracker, terms_dict=self.terms_dict)
         }
 
     def initialize(self):
@@ -22,6 +23,31 @@ class UIController:
             page_icon="📖",
             layout="wide",
         )
+        self._inject_tooltip_css()
+
+    def _inject_tooltip_css(self):
+        st.markdown("""
+            <style>
+            .tooltip-span {
+                position: relative;
+                text-decoration: underline;
+                cursor: help;
+            }
+            .tooltip-span:hover::after {
+                content: attr(data-tooltip);
+                position: absolute;
+                bottom: 100%;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: #333;
+                color: #fff;
+                padding: 5px 10px;
+                border-radius: 5px;
+                white-space: nowrap;
+                z-index: 10;
+            }
+            </style>
+        """, unsafe_allow_html=True)
 
     @st.cache_data(max_entries=10)
     def load_areas_csv(_self):
@@ -34,14 +60,13 @@ class UIController:
     def run(self):
         self.initialize()
 
-        terms_dict = self.file_handler.get_all_terms_and_descriptions()
         query_params = st.query_params
 
         if "term" in query_params:
             term = query_params["term"]
-            if term in terms_dict:
+            if term in self.terms_dict:
                 with st.dialog(f"用語説明: {term}"):
-                    st.markdown(terms_dict[term])
+                    st.markdown(self.terms_dict[term])
                     if st.button("閉じる"):
                         # 'term' パラメータのみを削除し、他のクエリパラメータは維持する
                         new_params = {k: v for k, v in query_params.items() if k != 'term'}
