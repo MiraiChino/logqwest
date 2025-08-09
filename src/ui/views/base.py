@@ -5,7 +5,6 @@ class BaseView:
     def __init__(self, file_handler, progress_tracker):
         self.file_handler = file_handler
         self.progress_tracker = progress_tracker
-        self.terms_dict = self.file_handler.get_all_terms_and_descriptions()
 
     def _make_areas_clickable(self, df):
         df_clickable = df.copy()
@@ -67,27 +66,21 @@ class BaseView:
     
     def render_format_cell_content(self, value):
         if isinstance(value, str):
-            # リンクが既に含まれている場合は何もしない
-            if '<a href' in value:
-                return st.html(value)
 
-            highlighted_value = self.file_handler._make_terms_clickable(value, self.terms_dict)
-            
-            if ';' in highlighted_value:
+
+            if ';' in value:
                 formatted_text = ""
-                for element in highlighted_value.split(';'):
+                for element in value.split(';'):
                     if ':' in element:
                         key, val = element.split(':', 1)
-                        formatted_text += f"**{key}**: {val}  \\n"
+                        formatted_text += f"**{key}**: {val}  \n"
                     else:
-                        formatted_text += f"{element}  \\n"
-                return st.markdown(formatted_text, unsafe_allow_html=True)
-            elif ':' in highlighted_value:
-                key, val = highlighted_value.split(':', 1)
-                return st.markdown(f"**{key}**: {val}", unsafe_allow_html=True)
-            
-            return st.markdown(highlighted_value, unsafe_allow_html=True)
-        return st.html(str(value))
+                        formatted_text += f"{element}  \n"
+                return st.markdown(formatted_text)
+            elif ':' in value:
+                key, val = value.split(':', 1)
+                return st.markdown(f"**{key}**: {val}")
+        return st.html(value)
 
     def display_dataframe(self, df: pd.DataFrame,
                         df_clickable: pd.DataFrame = None,
