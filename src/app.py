@@ -248,8 +248,7 @@ def show_home(adventure_history, terms_dict):
         if 'location_history' not in st.session_state:
             st.session_state.location_history = []
         
-        if 'accumulated_messages' not in st.session_state:
-            st.session_state.accumulated_messages = []
+        accumulated_messages = []
 
         if 'adventurer' not in st.session_state:
             st.session_state.adventurer = ""
@@ -257,18 +256,18 @@ def show_home(adventure_history, terms_dict):
         return_button_container = st.empty() # 戻るボタン用のコンテナ
         summary_container = st.empty() # 冒険サマリー用のコンテナ
         message_container = st.empty() # メッセージコンテナ
-        message_container.write("".join(st.session_state.accumulated_messages), unsafe_allow_html=True)
+        message_container.write("".join(accumulated_messages), unsafe_allow_html=True)
         if st.button(f"冒険者を雇う（¥{ADVENTURE_COST}の出資）", disabled=st.session_state.running_adventure, key="run_button"):
             st.session_state.location_history = []
             st.session_state.adventurer = ""
-            st.session_state.accumulated_messages = []
+            accumulated_messages = []
             summary_container.empty() # コンテナを空にする
             return_button_container.empty() # 戻るボタンコンテナを空にする
 
             # 冒険開始前のメッセージ
             initial_message_html = "<span style='color: #888; font-style: italic;'>冒険者を探しています...</span><br>"
-            st.session_state.accumulated_messages.insert(0, initial_message_html) # リストの先頭に追加
-            message_container.write("".join(st.session_state.accumulated_messages), unsafe_allow_html=True)
+            accumulated_messages.insert(0, initial_message_html) # リストの先頭に追加
+            message_container.write("".join(accumulated_messages), unsafe_allow_html=True)
             time.sleep(3)
 
             for event in run_adventure_streaming():
@@ -277,7 +276,7 @@ def show_home(adventure_history, terms_dict):
                     break
                 elif event["type"] == "hiring":
                     hiring_message_html = f"<span style='color: #2ecc71;'>✦ 冒険者『{event['adventurer']}』を旅立たせました。 ✦</span><br>"
-                    st.session_state.accumulated_messages.insert(0, hiring_message_html)
+                    accumulated_messages.insert(0, hiring_message_html)
                     st.session_state.adventurer = event['adventurer'] # 冒険者名をセッションステートに保存
                     with right_column: # 右カラムのコンテナを使用
                         adventurer_name_container.markdown(f"{st.session_state.adventurer}の現在地") # 冒険者名を表示
@@ -286,7 +285,7 @@ def show_home(adventure_history, terms_dict):
                     highlighted_text = file_handler._make_terms_clickable(event['text'], terms_dict)
                     text_html = f"<span style='font-size:1em;'>{highlighted_text}</span><br>"
                     message_html = time_html + text_html
-                    st.session_state.accumulated_messages.insert(0, message_html)
+                    accumulated_messages.insert(0, message_html)
                     
                     current_location = event.get("location", "")
                     if current_location and (not st.session_state.location_history or st.session_state.location_history[-1] != current_location): # location が存在し、履歴にない or 最新の場所と異なる場合のみ追加
@@ -306,7 +305,7 @@ def show_home(adventure_history, terms_dict):
                             st.write(f"- {name}")
                             file_handler.add_item_to_inventory(name, event.get("result", "成功"), config_manager.item_value_table)
                     file_handler.update_balance(-ADVENTURE_COST) # 冒険費用を差し引く
-                message_container.write("".join(st.session_state.accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
+                message_container.write("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
                 time.sleep(0.1)
             if return_button_container.button("戻る", key="return_button"):
                 st.session_state.location_history = []
@@ -367,8 +366,6 @@ def main():
                 st.session_state.location_history = []
             if 'adventurer' in st.session_state:
                 st.session_state.adventurer = ""
-            if 'accumulated_messages' in st.session_state:
-                st.session_state.accumulated_messages = []
             st.rerun()
 
         current_balance = file_handler.load_usage_data().get("balance", 0)
