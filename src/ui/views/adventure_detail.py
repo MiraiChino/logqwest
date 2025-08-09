@@ -37,8 +37,9 @@ class AdventureDetailView(BaseView):
                 if item_name:
                     desc = self.file_handler.get_item_description(item_name)
                     if desc:
-                        st.write(f"- `{item_name}`")
-                        st.caption(desc)
+                        # アイテム名にホバー説明を適用
+                        clickable_item_name = self.file_handler._make_terms_clickable(item_name, self.terms_dict)
+                        st.markdown(f"- {clickable_item_name}", unsafe_allow_html=True)
                     else:
                         st.info("この冒険ではアイテムを獲得しませんでした。")
                 else:

@@ -14,7 +14,7 @@ file_structure = FileStructure(
     check_result_dir=config_manager.paths.check_result_dir,
     prompt_dir=config_manager.paths.prompt_dir
 )
-file_handler = FileHandler(file_structure)
+file_handler = FileHandler(file_structure, config_manager)
 
 ADVENTURE_COST = 100
 DEBUG_MODE = True
@@ -121,6 +121,25 @@ def run_adventure_streaming():
         yield {"type": "error", "error": f"ファイルが見つかりません: {location_file}"}
         return
 
+    items = []
+    area_df = file_handler.load_area_csv(selected_area)
+    if area_df is not None and "アイテム" in area_df.columns:
+        # 選択された冒険の行をフィルタリング
+        adventure_row = area_df[area_df["冒険名"] == selected_adventure]
+        if not adventure_row.empty:
+            csv_items_str = adventure_row["アイテム"].iloc[0]
+            if isinstance(csv_items_str, str):
+                item_value = config_manager.item_value_table.get(selected_result, 0)
+                for item_name_str in csv_items_str.split(";"):
+                    item_name = item_name_str.strip()
+                    if item_name:
+                        item_detail = {
+                            "name": item_name,
+                            "value": item_value,
+                        }
+                        items.append(item_detail)
+                        file_handler.add_item_to_inventory(item_detail)
+
     names_file = file_structure.data_dir / "names.txt"
     adventurer_name = select_adventurer_name(names_file, adventure_history)
 
@@ -161,7 +180,7 @@ def run_adventure_streaming():
             if increment_this_step > timedelta(0):
                 sleep_seconds = increment_this_step.total_seconds()
                 actual_sleep_duration = sleep_seconds / 3600
-                actual_sleep_duration = sleep_seconds / 60
+                # actual_sleep_duration = sleep_seconds / 60
                 # print(f"デバッグ: Step {i}, 場所変更: {is_location_change}, 増加時間: {increment_this_step}, sleep: {actual_sleep_duration:.2f}秒") # 必要ならコメント解除
 
                 if actual_sleep_duration > 0:
@@ -205,7 +224,8 @@ def run_adventure_streaming():
         "prize": prize,
         "count": count,
         "prev_adventure": prev_adventure,
-        "precursor": precursor
+        "precursor": precursor,
+        "items": items # 獲得アイテムを追加
     }
     current_usage_data = file_handler.load_usage_data() # usage_dataをロード
     current_usage_data["adventure_history"].append(adventure_entry)
@@ -213,11 +233,20 @@ def run_adventure_streaming():
 
     hours, remainder = divmod(total_time.total_seconds(), 3600)
     minutes = remainder // 60
+
+    if items:
+        if len(items) == 1:
+            item_summary = f"`{items[0]['name']}` (🪙 {items[0]['value']})"
+        else:
+            item_summary = "\n".join([f"\n  - `{item['name']}` (🪙 {item['value']})" for item in items])
+    else:
+        item_summary = "なし"
+
     summary_text = (
-        f"- 結果: `{selected_result}`\n"
-        f"- 獲得金額: `{prize}円`\n"
+        f"- 獲得アイテム: {item_summary}\n"
         f"- エリア: `{selected_area}`\n"
         f"- 冒険者: `{adventurer_name}`\n"
         f"- 経過時間: `{int(hours)}時間{int(minutes)}分`"
     )
-    yield {"type": "summary", "text": summary_text}
+
+    yield {"type": "summary", "text": summary_text, "items": items}

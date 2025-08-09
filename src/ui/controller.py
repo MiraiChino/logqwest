@@ -43,8 +43,12 @@ class UIController:
                 color: #fff;
                 padding: 5px 10px;
                 border-radius: 5px;
-                white-space: nowrap;
+                white-space: normal; /* 通常の改行ルールに戻す */
                 z-index: 10;
+                width: auto; /* コンテンツの幅に合わせる */
+                max-width: 450px; /* 最大幅を調整 */
+                text-align: left; /* テキストを左揃えに */
+                right: auto; /* 右端に固定されないようにする */
             }
             </style>
         """, unsafe_allow_html=True)

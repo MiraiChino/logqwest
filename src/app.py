@@ -17,7 +17,7 @@ file_structure = FileStructure(
     check_result_dir=config_manager.paths.check_result_dir,
     prompt_dir=config_manager.paths.prompt_dir
 )
-file_handler = FileHandler(file_structure)
+file_handler = FileHandler(file_structure, config_manager)
 
 
 # ロケール設定
@@ -179,10 +179,20 @@ def display_past_adventure(entry, terms_dict):
     col2.metric("冒険者", entry["adventurer"])
     col3.metric("エリア", entry["area"])
 
-    if entry.get("items"):
+    if "items" in entry and entry.get("items"):
         st.markdown("#### 獲得アイテム")
-        for item in entry["items"]:
-            st.write(f"- {item['name']} x {item['quantity']} (価値: ¥{item['value']})")
+        for i, item in enumerate(entry["items"]):
+            col1, col2 = st.columns([4, 1])
+            col1.write(f"- {item['name']} (🪙 {item['value']})")
+            if col2.button("売却", key=f"sell_{entry['timestamp']}_{i}"):
+                # アイテムをインベントリから削除し、所持金を更新
+                success = file_handler.sell_item(item['name'], 1, item['value'])
+                if success:
+                    st.toast(f"{item['name']}を売却しました。")
+                    # 表示を更新するためにリロード
+                    st.rerun()
+                else:
+                    st.error("アイテムの売却に失敗しました。")
 
     # カラムレイアウトを作成
     left_column, right_column = st.columns([3, 1])
@@ -240,6 +250,12 @@ def show_home(adventure_history, terms_dict):
 
     # 左側のカラムにテキストログなどを表示
     with left_column:
+        # コンテナを常に定義
+        return_button_container = st.empty()
+        summary_container = st.empty()
+        message_container = st.empty()
+
+        # セッションステートの初期化
         if 'run_button' in st.session_state and st.session_state.run_button:
             st.session_state.running_adventure = True
         else:
@@ -247,17 +263,14 @@ def show_home(adventure_history, terms_dict):
 
         if 'location_history' not in st.session_state:
             st.session_state.location_history = []
+        if 'adventurer' not in st.session_state:
+            st.session_state.adventurer = ""
         
         accumulated_messages = []
 
-        if 'adventurer' not in st.session_state:
-            st.session_state.adventurer = ""
-
-        return_button_container = st.empty() # 戻るボタン用のコンテナ
-        summary_container = st.empty() # 冒険サマリー用のコンテナ
-        message_container = st.empty() # メッセージコンテナ
         message_container.write("".join(accumulated_messages), unsafe_allow_html=True)
-        if st.button(f"冒険者を雇う（¥{ADVENTURE_COST}の出資）", disabled=st.session_state.running_adventure, key="run_button"):
+        if st.button(f"冒険者を旅立たせる（🪙 {ADVENTURE_COST} 出資）", disabled=st.session_state.running_adventure, key="run_button"):
+            st.session_state.running_adventure = True # 冒険開始時にフラグを設定
             st.session_state.location_history = []
             st.session_state.adventurer = ""
             accumulated_messages = []
@@ -299,14 +312,10 @@ def show_home(adventure_history, terms_dict):
 
                 elif event["type"] == "summary":
                     summary_container.markdown(f"### 冒険結果\n{event['text']}")
-                    if "items" in event and event.get("result") != "失敗":
-                        st.markdown("#### 獲得アイテム")
-                        for name in event["items"]:
-                            st.write(f"- {name}")
-                            file_handler.add_item_to_inventory(name, event.get("result", "成功"), config_manager.item_value_table)
                     file_handler.update_balance(-ADVENTURE_COST) # 冒険費用を差し引く
                 message_container.write("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
                 time.sleep(0.1)
+            st.session_state.running_adventure = False # 冒険終了時にフラグをリセット
             if return_button_container.button("戻る", key="return_button"):
                 st.session_state.location_history = []
                 st.session_state.adventurer = ""
@@ -321,28 +330,31 @@ def main():
     .tooltip-span {
         position: relative;
     }
+
     .tooltip-span:hover::after {
         content: attr(data-tooltip);
         position: absolute;
         bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 8px 12px;
+        left: 0;              /* 親要素左端に合わせる */
+
+        width: 250px;         /* 横幅を固定 */
+        white-space: normal;  /* 折り返しOK */
+        
+        padding: 6px 10px;
         border-radius: 6px;
         background-color: #333;
         color: #fff;
-        font-size: 0.9em;
-        white-space: pre-wrap; /* 改行を許可し、長いテキストを折り返す */
+        font-size: 0.85em;
         z-index: 1000;
-        width: max-content; /* コンテンツの幅に合わせる */
-        max-width: 300px; /* 最大幅を指定 */
-        text-align: left; /* テキストを左揃えに */
+        box-sizing: border-box;
+
+        word-break: break-word;    /* 長い単語も途中で折り返す */
+        overflow-wrap: break-word; /* 補助的に折り返し */
     }
     </style>
     """, unsafe_allow_html=True)
     usage_data = file_handler.load_usage_data()
     adventure_history = usage_data.get("adventure_history", [])
-    st.session_state.running_adventure = False
     st.cache_data.clear() # キャッシュをクリア
 
     terms_dict = file_handler.get_all_terms_and_descriptions()
@@ -361,15 +373,29 @@ def main():
     with st.sidebar:
         if st.button("ホーム"):
             st.query_params.clear()
-            # セッションステートをクリア
-            if 'location_history' in st.session_state:
-                st.session_state.location_history = []
-            if 'adventurer' in st.session_state:
-                st.session_state.adventurer = ""
             st.rerun()
 
         current_balance = file_handler.load_usage_data().get("balance", 0)
-        st.metric("💰所持金", f"¥{current_balance}")
+        st.subheader(f"🪙 {current_balance}")
+        # st.markdown(f"<p style='font-size: 150%;'>🪙 {current_balance}</p>", unsafe_allow_html=True)
+
+        st.subheader("🎁所持アイテム")
+        inventory = file_handler.load_usage_data().get("inventory", [])
+        if inventory:
+            for i, item in enumerate(inventory):
+                col1, col2 = st.columns([1, 1])
+                clickable_item_name = file_handler._make_terms_clickable(item['name'], terms_dict)
+                col1.markdown(f"- {clickable_item_name}", unsafe_allow_html=True)
+                if col2.button(f"🪙 {item['value']} 売却", key=f"sell_inventory_{item['name']}_{i}"):
+                    success = file_handler.sell_item(item['name'], 1, item['value'])
+                    if success:
+                        st.toast(f"{item['name']}を売却しました。")
+                        st.rerun()
+                    else:
+                        st.error("アイテムの売却に失敗しました。")
+        else:
+            st.write("所持アイテムはありません。")
+
         show_adventure_history_sidebar(adventure_history)
 
     if selected_entry:

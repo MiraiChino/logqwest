@@ -15,8 +15,9 @@ class FileStructure:
     prompt_dir: Path
 
 class FileHandler:
-    def __init__(self, file_structure: FileStructure):
+    def __init__(self, file_structure: FileStructure, config_manager):
         self.structure = file_structure
+        self.config_manager = config_manager
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
@@ -345,7 +346,7 @@ class FileHandler:
             yield f"🔥 エリア: {area}"
 
     def _delete_adventures(self, area_name: str, adventures: List[str], prev_area_name: str = None, next_area_name: str = None) -> Iterator[str]:
-        prev_area_name = self.get_previous_area_name(area_name)
+        prev_area_name = self.get_previous_adventure_name(area_name)
         next_area_name = self.get_next_area_name(area_name)
 
         # 次の冒険が存在する場合、再帰的に削除する
@@ -446,24 +447,32 @@ class FileHandler:
         with user_data_file.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    def add_item_to_inventory(self, item_name: str, result: str, value_table: Dict[str, int]) -> None:
+    def add_item_to_inventory(self, item: Dict) -> None:
         data = self.load_usage_data()
         inventory = data.get("inventory", [])
-        value = value_table.get(result, 0)
-        inventory.append({"name": item_name, "quantity": 1, "value": value})
+        inventory.append(item)
         data["inventory"] = inventory
         self.save_usage_data(data)
 
-    def remove_item_from_inventory(self, item_name: str) -> bool:
+    def sell_item(self, item_name: str, quantity_to_sell: int, item_value: int) -> bool:
         data = self.load_usage_data()
         inventory = data.get("inventory", [])
-        for item in inventory:
+        
+        items_to_remove = []
+        for i, item in enumerate(inventory):
             if item["name"] == item_name:
-                inventory.remove(item)
-                data["inventory"] = inventory
-                self.save_usage_data(data)
-                return True
-        return False
+                items_to_remove.append(i)
+        
+        if len(items_to_remove) >= quantity_to_sell:
+            # Remove items from the end to avoid index issues
+            for _ in range(quantity_to_sell):
+                inventory.pop(items_to_remove.pop())
+            self.update_balance(item_value * quantity_to_sell)
+            data["inventory"] = inventory
+            self.save_usage_data(data)
+            return True
+        else:
+            return False # Not enough items to sell
 
     def update_balance(self, amount: int) -> None:
         data = self.load_usage_data()
@@ -501,7 +510,7 @@ class FileHandler:
 
     def get_all_terms_and_descriptions(self) -> Dict[str, str]:
         """
-        LV1データと冒険データからすべての用語とその説明を抽出し、辞書形式で返す。
+        LV1データと冒険データからすべての用語とその説明を抽出する。
         重複する用語があった場合、後から読み込んだもので上書きする。
         """
         terms_dict = {}
@@ -574,7 +583,8 @@ class FileHandler:
 
         def replace_func(match):
             term = match.group(0)
-            desc = terms_dict.get(term, "").replace('"', '"') # CSS属性内での引用符をエスケープ
+            # 説明文から改行コードを削除し、CSS属性内での引用符をエスケープ
+            desc = terms_dict.get(term, "").replace('\n', ' ').replace('\r', '').replace('"', '"')
             # CSSでツールチップを表示するためのカスタム属性とクラスを設定
             return f'<span class="tooltip-span" data-tooltip="{desc}" style="text-decoration: underline; color: #1E90FF; cursor: help;">{term}</span>'
 
