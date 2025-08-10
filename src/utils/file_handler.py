@@ -447,6 +447,31 @@ class FileHandler:
         with user_data_file.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
+    def get_items(self, selected_area: str, selected_adventure: str, selected_result: str) -> list:
+        area_df = self.load_area_csv(selected_area)
+        items = []
+        result_emojis = {
+            "大成功": "💎",
+            "成功": "🎁",
+            "失敗": "❌",
+        }
+        if area_df is not None and "アイテム" in area_df.columns:
+            # 選択された冒険の行をフィルタリング
+            adventure_row = area_df[area_df["冒険名"] == selected_adventure]
+            if not adventure_row.empty:
+                csv_items_str = adventure_row["アイテム"].iloc[0]
+                if isinstance(csv_items_str, str):
+                    item_value = self.config_manager.item_value_table.get(selected_result, 0)
+                    for item_name_str in csv_items_str.split(";"):
+                        item_name = result_emojis[selected_result] + " " + item_name_str.strip()
+                        if item_name:
+                            item_detail = {
+                                "name": item_name,
+                                "value": item_value,
+                            }
+                            items.append(item_detail)
+        return items
+
     def add_item_to_inventory(self, item: Dict) -> None:
         data = self.load_usage_data()
         inventory = data.get("inventory", [])
@@ -454,7 +479,7 @@ class FileHandler:
         data["inventory"] = inventory
         self.save_usage_data(data)
 
-    def sell_item(self, item_name: str, quantity_to_sell: int, item_value: int) -> bool:
+    def sell_item(self, item_name: str, item_value: int) -> bool:
         data = self.load_usage_data()
         inventory = data.get("inventory", [])
         
@@ -463,11 +488,10 @@ class FileHandler:
             if item["name"] == item_name:
                 items_to_remove.append(i)
         
-        if len(items_to_remove) >= quantity_to_sell:
+        if len(items_to_remove) >= 1:
             # Remove items from the end to avoid index issues
-            for _ in range(quantity_to_sell):
-                inventory.pop(items_to_remove.pop())
-            self.update_balance(item_value * quantity_to_sell)
+            inventory.pop(items_to_remove.pop())
+            data["balance"] = data.get("balance", 0) + item_value
             data["inventory"] = inventory
             self.save_usage_data(data)
             return True
@@ -555,7 +579,7 @@ class FileHandler:
                             terms_dict[token] = desc if desc else ""
         return terms_dict
 
-    def _make_terms_clickable(self, text: str, terms_dict: Dict[str, str]) -> str:
+    def _make_terms_clickable(self, text: str, terms_dict: Dict[str, str], display_text: str=None) -> str:
         """
         テキスト内の用語をクエリパラメータ付きのHTMLアンカータグに置換する。
 
@@ -586,6 +610,9 @@ class FileHandler:
             # 説明文から改行コードを削除し、CSS属性内での引用符をエスケープ
             desc = terms_dict.get(term, "").replace('\n', ' ').replace('\r', '').replace('"', '"')
             # CSSでツールチップを表示するためのカスタム属性とクラスを設定
-            return f'<span class="tooltip-span" data-tooltip="{desc}" style="text-decoration: underline; color: #1E90FF; cursor: help;">{term}</span>'
+            return self.term_to_html(display_text or term, desc)
 
         return re.sub(combined_pattern, replace_func, text)
+    
+    def term_to_html(self, term: str, desc: str) -> str:
+        return f'<span class="tooltip-span" data-tooltip="{desc}" style="text-decoration: underline; color: #1E90FF; cursor: help;">{term}</span>'

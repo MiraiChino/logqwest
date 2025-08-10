@@ -156,6 +156,7 @@ def display_past_adventure(entry, terms_dict):
         if location_history_path.exists():
             with location_history_path.open("r", encoding="utf-8") as f:
                 location_history = [loc.strip() for loc in f.readlines() if loc.strip()]
+        items = entry.get("items", [])
     except Exception as e:
         st.error(f"ファイル読み込みエラー: {str(e)}")
         return
@@ -172,27 +173,23 @@ def display_past_adventure(entry, terms_dict):
         duration_str = f"{start_time.strftime('%m/%d(%a) %H:%M')} ~ {end_time.strftime('%H:%M')}"
     else:
         duration_str = f"{start_time.strftime('%m/%d(%a) %H:%M')} ~ {end_time.strftime('%m/%d(%a) %H:%M')}"
+
+
     st.metric("冒険期間", duration_str)
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("結果", f"{get_result_emoji(entry['result'])} {entry['result']}")
-    col2.metric("冒険者", entry["adventurer"])
-    col3.metric("エリア", entry["area"])
-
-    if "items" in entry and entry.get("items"):
-        st.markdown("#### 獲得アイテム")
-        for i, item in enumerate(entry["items"]):
-            col1, col2 = st.columns([4, 1])
-            col1.write(f"- {item['name']} (🪙 {item['value']})")
-            if col2.button("売却", key=f"sell_{entry['timestamp']}_{i}"):
-                # アイテムをインベントリから削除し、所持金を更新
-                success = file_handler.sell_item(item['name'], 1, item['value'])
-                if success:
-                    st.toast(f"{item['name']}を売却しました。")
-                    # 表示を更新するためにリロード
-                    st.rerun()
-                else:
-                    st.error("アイテムの売却に失敗しました。")
+    if len(items) == 0:
+        item_str = "なし"
+    elif len(items) == 1:
+        item_str = items[0]['name']
+    else:
+        item_str = ", ".join([f"{i['name']}" for i in items])
+    col1.markdown("獲得アイテム")
+    col1.markdown(f"##### {file_handler._make_terms_clickable(item_str, terms_dict)}", unsafe_allow_html=True)
+    col2.markdown("エリア")
+    col2.markdown(f'##### {entry["area"]}')
+    col3.markdown("冒険者")
+    col3.markdown(f'##### {entry["adventurer"]}')
 
     # カラムレイアウトを作成
     left_column, right_column = st.columns([3, 1])
@@ -269,7 +266,7 @@ def show_home(adventure_history, terms_dict):
         accumulated_messages = []
 
         message_container.write("".join(accumulated_messages), unsafe_allow_html=True)
-        if st.button(f"冒険者を旅立たせる（🪙 {ADVENTURE_COST} 出資）", disabled=st.session_state.running_adventure, key="run_button"):
+        if st.button(f"冒険者を旅立たせる: 🪙 {ADVENTURE_COST}", disabled=st.session_state.running_adventure, key="run_button"):
             st.session_state.running_adventure = True # 冒険開始時にフラグを設定
             st.session_state.location_history = []
             st.session_state.adventurer = ""
@@ -311,7 +308,7 @@ def show_home(adventure_history, terms_dict):
                             map_container.graphviz_chart(adv_map)
 
                 elif event["type"] == "summary":
-                    summary_container.markdown(f"### 冒険結果\n{event['text']}")
+                    summary_container.markdown(f"{event['text']}")
                     file_handler.update_balance(-ADVENTURE_COST) # 冒険費用を差し引く
                 message_container.write("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
                 time.sleep(0.1)
@@ -375,34 +372,43 @@ def main():
             st.query_params.clear()
             st.rerun()
 
-        current_balance = file_handler.load_usage_data().get("balance", 0)
-        st.subheader(f"🪙 {current_balance}")
-        # st.markdown(f"<p style='font-size: 150%;'>🪙 {current_balance}</p>", unsafe_allow_html=True)
+        # CSSでマージンとパディングを調整
+        st.markdown("""
+        <style>
+        div.stHorizontalBlock {
+            margin-bottom: 0px;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-        st.subheader("🎁所持アイテム")
+
+        current_balance = file_handler.load_usage_data().get("balance", 0)
+        st.subheader(f"所持金: 🪙 {current_balance}")
+
         inventory = file_handler.load_usage_data().get("inventory", [])
         if inventory:
+            st.subheader(f"所持アイテム: {len(inventory)}")
             for i, item in enumerate(inventory):
-                col1, col2 = st.columns([1, 1])
+                col1, col2 = st.columns([1, 1], gap="small")
                 clickable_item_name = file_handler._make_terms_clickable(item['name'], terms_dict)
-                col1.markdown(f"- {clickable_item_name}", unsafe_allow_html=True)
-                if col2.button(f"🪙 {item['value']} 売却", key=f"sell_inventory_{item['name']}_{i}"):
-                    success = file_handler.sell_item(item['name'], 1, item['value'])
+                col1.markdown(f"<div style='padding-top: 8px;'> {clickable_item_name}", unsafe_allow_html=True)
+                clicked = col2.button(f"売却: 🪙 {item['value']}", key=f"sell_{i}", type="tertiary")
+                if clicked:
+                    success = file_handler.sell_item(item['name'], item['value'])
                     if success:
-                        st.toast(f"{item['name']}を売却しました。")
-                        st.rerun()
+                        st.toast(f"{item['name']}を売却し、🪙 {item['value']}を獲得しました。")
                     else:
                         st.error("アイテムの売却に失敗しました。")
         else:
-            st.write("所持アイテムはありません。")
+            st.subheader(f"所持アイテム: なし")
 
+        st.markdown("---")
         show_adventure_history_sidebar(adventure_history)
 
     if selected_entry:
         display_past_adventure(selected_entry, terms_dict)
     else:
         show_home(adventure_history, terms_dict)
-
 
 if __name__ == "__main__":
     main()

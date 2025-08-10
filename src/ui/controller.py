@@ -30,25 +30,27 @@ class UIController:
             <style>
             .tooltip-span {
                 position: relative;
-                text-decoration: underline;
-                cursor: help;
             }
+
             .tooltip-span:hover::after {
                 content: attr(data-tooltip);
                 position: absolute;
                 bottom: 100%;
-                left: 50%;
-                transform: translateX(-50%);
+                left: 0;              /* 親要素左端に合わせる */
+
+                width: 250px;         /* 横幅を固定 */
+                white-space: normal;  /* 折り返しOK */
+                
+                padding: 6px 10px;
+                border-radius: 6px;
                 background-color: #333;
                 color: #fff;
-                padding: 5px 10px;
-                border-radius: 5px;
-                white-space: normal; /* 通常の改行ルールに戻す */
-                z-index: 10;
-                width: auto; /* コンテンツの幅に合わせる */
-                max-width: 450px; /* 最大幅を調整 */
-                text-align: left; /* テキストを左揃えに */
-                right: auto; /* 右端に固定されないようにする */
+                font-size: 0.85em;
+                z-index: 1000;
+                box-sizing: border-box;
+
+                word-break: break-word;    /* 長い単語も途中で折り返す */
+                overflow-wrap: break-word; /* 補助的に折り返し */
             }
             </style>
         """, unsafe_allow_html=True)

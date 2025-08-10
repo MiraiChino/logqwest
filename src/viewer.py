@@ -6,7 +6,7 @@ from src.ui.controller import UIController
 
 def main():
     config = ConfigManager(Path("prompt/config.json"))
-    file_handler = FileHandler(config.paths)
+    file_handler = FileHandler(config.paths, config)
     progress_tracker = ProgressTracker(file_handler)
     
     controller = UIController(file_handler, progress_tracker)

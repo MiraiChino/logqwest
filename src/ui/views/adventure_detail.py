@@ -20,9 +20,6 @@ class AdventureDetailView(BaseView):
 
         self._render_adventure_content(area_name, adventure_name)
 
-        # アイテム表示と売却機能
-        self._render_items_section(area_name, adventure_name)
-
         if st.button("戻る"):
             st.query_params.update({"area": area_name, "adv": ""})
             st.rerun()
@@ -39,7 +36,7 @@ class AdventureDetailView(BaseView):
                     if desc:
                         # アイテム名にホバー説明を適用
                         clickable_item_name = self.file_handler._make_terms_clickable(item_name, self.terms_dict)
-                        st.markdown(f"- {clickable_item_name}", unsafe_allow_html=True)
+                        st.markdown(f"- {clickable_item_name} <a href='?area={area_name}&adv={adventure_name}&sell_item={item_name}' target='_self' style='font-size: 0.9em; color: #FF6347; text-decoration: underline; margin-left: 10px;'>[売却]</a>", unsafe_allow_html=True)
                     else:
                         st.info("この冒険ではアイテムを獲得しませんでした。")
                 else:

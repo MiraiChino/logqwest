@@ -15,6 +15,7 @@ file_structure = FileStructure(
     prompt_dir=config_manager.paths.prompt_dir
 )
 file_handler = FileHandler(file_structure, config_manager)
+terms_dict = file_handler.get_all_terms_and_descriptions()
 
 ADVENTURE_COST = 100
 DEBUG_MODE = True
@@ -121,24 +122,10 @@ def run_adventure_streaming():
         yield {"type": "error", "error": f"ファイルが見つかりません: {location_file}"}
         return
 
-    items = []
-    area_df = file_handler.load_area_csv(selected_area)
-    if area_df is not None and "アイテム" in area_df.columns:
-        # 選択された冒険の行をフィルタリング
-        adventure_row = area_df[area_df["冒険名"] == selected_adventure]
-        if not adventure_row.empty:
-            csv_items_str = adventure_row["アイテム"].iloc[0]
-            if isinstance(csv_items_str, str):
-                item_value = config_manager.item_value_table.get(selected_result, 0)
-                for item_name_str in csv_items_str.split(";"):
-                    item_name = item_name_str.strip()
-                    if item_name:
-                        item_detail = {
-                            "name": item_name,
-                            "value": item_value,
-                        }
-                        items.append(item_detail)
-                        file_handler.add_item_to_inventory(item_detail)
+
+    items = file_handler.get_items(selected_area, selected_adventure, selected_result)
+    for item_detail in items:
+        file_handler.add_item_to_inventory(item_detail)
 
     names_file = file_structure.data_dir / "names.txt"
     adventurer_name = select_adventurer_name(names_file, adventure_history)
@@ -217,11 +204,10 @@ def run_adventure_streaming():
     # 履歴の追加
     adventure_entry = {
         "timestamp": start_time,
+        "result": selected_result,
         "adventurer": adventurer_name,
         "area": selected_area,
         "adventure": selected_adventure,
-        "result": selected_result,
-        "prize": prize,
         "count": count,
         "prev_adventure": prev_adventure,
         "precursor": precursor,
@@ -236,14 +222,22 @@ def run_adventure_streaming():
 
     if items:
         if len(items) == 1:
-            item_summary = f"`{items[0]['name']}` (🪙 {items[0]['value']})"
+            item_summary = f"{items[0]['name']}"
         else:
-            item_summary = "\n".join([f"\n  - `{item['name']}` (🪙 {item['value']})" for item in items])
+            item_summary = ",".join([item['name'] for item in items])
     else:
         item_summary = "なし"
+    item_text = file_handler._make_terms_clickable(item_summary, terms_dict)
+
+    if selected_result == "大成功":
+        main_text = f"{item_text}を獲得しました"
+    elif selected_result == "成功":
+        main_text = f"{item_text}を獲得しました"
+    else:
+        main_text = f"❌️ 冒険は失敗しました"
 
     summary_text = (
-        f"- 獲得アイテム: {item_summary}\n"
+        f"#### {main_text}\n"
         f"- エリア: `{selected_area}`\n"
         f"- 冒険者: `{adventurer_name}`\n"
         f"- 経過時間: `{int(hours)}時間{int(minutes)}分`"
