@@ -308,7 +308,7 @@ def show_home(adventure_history, terms_dict):
                             map_container.graphviz_chart(adv_map)
 
                 elif event["type"] == "summary":
-                    summary_container.markdown(f"{event['text']}")
+                    summary_container.markdown(f"{event['text']}", unsafe_allow_html=True)
                     file_handler.update_balance(-ADVENTURE_COST) # 冒険費用を差し引く
                 message_container.write("".join(accumulated_messages), unsafe_allow_html=True) # イベントごとに message_container を更新
                 time.sleep(0.1)
